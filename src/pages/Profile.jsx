@@ -24,6 +24,10 @@ function labelForRow(row) {
   return `${hour > 12 ? hour - 12 : hour}:` + `${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`
 }
 
+function shortLabelForRow(row) {
+  return labelForRow(row).replace(':00 ', ' ')
+}
+
 function availabilityToCells(slots) {
   const selected = new Set()
   slots.forEach(({ day, startTime, endTime }) => {
@@ -219,6 +223,12 @@ export function Profile() {
     saveCells(new Set())
   }
 
+  function rangeEndFor(day, row) {
+    let end = row
+    while (selectedCells.has(`${day}-${end + 1}`)) end += 1
+    return end
+  }
+
   const courseModules = modulesForCourse(form.course)
   const selectedWindows = cellsToAvailability(selectedCells)
 
@@ -321,28 +331,34 @@ export function Profile() {
                 onPointerUp={finishDrag}
                 onPointerCancel={finishDrag}
               >
-                <div className="calendar-corner">Day</div>
-                {TIME_ROWS.map((row) => <div className="calendar-time" key={row}>{row % 2 === 0 ? labelForRow(row) : ''}</div>)}
-                {WEEKDAYS.map((day) => (
-                  <div className="calendar-row" key={day}>
-                    <div className="calendar-day">{day}</div>
-                    {TIME_ROWS.map((row) => {
+                <div className="calendar-corner" aria-hidden="true" />
+                {WEEKDAYS.map((day) => <div className="calendar-day" key={day}>{day}</div>)}
+                {TIME_ROWS.map((row) => (
+                  <div className="calendar-row" key={row}>
+                    <div className="calendar-time">{row % 2 === 0 ? labelForRow(row) : ''}</div>
+                    {WEEKDAYS.map((day) => {
                       const selected = selectedCells.has(`${day}-${row}`)
+                      const rangeStart = selected && !selectedCells.has(`${day}-${row - 1}`)
+                      const rangeEnd = selected && !selectedCells.has(`${day}-${row + 1}`)
+                      const endRow = rangeStart ? rangeEndFor(day, row) : row
                       return (
                         <button
                           aria-label={`${day} ${labelForRow(row)} to ${labelForRow(row + 1)}`}
                           aria-pressed={selected}
-                          className={`availability-cell${selected ? ' selected' : ''}`}
+                          className={`availability-cell${selected ? ' selected' : ''}${rangeStart ? ' range-start' : ''}${rangeEnd ? ' range-end' : ''}`}
                           data-availability-cell
                           data-day={day}
                           data-row={row}
                           disabled={savingSlots}
-                          key={row}
+                          key={day}
                           onClick={(event) => {
                             if (event.detail === 0) toggleCell(day, row)
                           }}
+                          style={rangeStart ? { '--range-rows': endRow - row + 1 } : undefined}
                           type="button"
-                        />
+                        >
+                          {rangeStart && <span className="availability-cell-time">{shortLabelForRow(row)}–{shortLabelForRow(endRow + 1)}</span>}
+                        </button>
                       )
                     })}
                   </div>
