@@ -35,7 +35,6 @@ export function Schedule() {
     date: '',
     startTime: '14:00',
     endTime: '15:00',
-    locationType: 'lt',
     location: LT_ROOMS[0],
     notes: '',
   })
@@ -157,32 +156,21 @@ export function Schedule() {
 
           <label className="field">
             Location
-            <div className="location-type">
-              <button
-                type="button"
-                className={form.locationType === 'lt' ? 'active' : ''}
-                onClick={() => setForm((f) => ({ ...f, locationType: 'lt', location: LT_ROOMS[0] }))}
-              >
-                Lecture Theatre
-              </button>
-              <button
-                type="button"
-                className={form.locationType === 'classroom' ? 'active' : ''}
-                onClick={() => setForm((f) => ({ ...f, locationType: 'classroom', location: CLASSROOMS[0] }))}
-              >
-                Classroom
-              </button>
-            </div>
-          </label>
-
-          <label className="field">
-            {form.locationType === 'lt' ? 'Lecture Theatre' : 'Classroom'}
             <select value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}>
-              {(form.locationType === 'lt' ? LT_ROOMS : CLASSROOMS).map((room) => (
-                <option key={room} value={room}>
-                  {room}
-                </option>
-              ))}
+              <optgroup label="Lecture Theatre">
+                {LT_ROOMS.map((room) => (
+                  <option key={room} value={room}>
+                    {room}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Classroom">
+                {CLASSROOMS.map((room) => (
+                  <option key={room} value={room}>
+                    {room}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </label>
 
