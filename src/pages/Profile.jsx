@@ -220,6 +220,7 @@ export function Profile() {
   }
 
   const courseModules = modulesForCourse(form.course)
+  const selectedWindows = cellsToAvailability(selectedCells)
 
   return (
     <>
@@ -299,6 +300,19 @@ export function Profile() {
               <span><i /> Available · 30 minute blocks</span>
               <button type="button" onClick={clearAvailability} disabled={savingSlots || selectedCells.size === 0}>Clear all</button>
             </div>
+            <div className="availability-selection" aria-live="polite">
+              {selectedWindows.length ? (
+                <>
+                  <b>Selected times</b>
+                  <div>
+                    {selectedWindows.slice(0, 4).map((slot) => (
+                      <span key={`${slot.day}-${slot.startTime}`}>{slot.day} · {labelForRow((Number(slot.startTime.slice(0, 2)) * 60 + Number(slot.startTime.slice(3, 5)) - FIRST_HOUR * 60) / INTERVAL_MINUTES)}–{labelForRow((Number(slot.endTime.slice(0, 2)) * 60 + Number(slot.endTime.slice(3, 5)) - FIRST_HOUR * 60) / INTERVAL_MINUTES)}</span>
+                    ))}
+                    {selectedWindows.length > 4 && <span>+{selectedWindows.length - 4} more</span>}
+                  </div>
+                </>
+              ) : <span>Select a time to see it here.</span>}
+            </div>
             <div className="availability-calendar-wrap">
               <div
                 className={`availability-calendar${savingSlots ? ' is-saving' : ''}`}
@@ -307,12 +321,12 @@ export function Profile() {
                 onPointerUp={finishDrag}
                 onPointerCancel={finishDrag}
               >
-                <div className="calendar-corner" aria-hidden="true" />
-                {WEEKDAYS.map((day) => <div className="calendar-day" key={day}>{day}</div>)}
-                {TIME_ROWS.map((row) => (
-                  <div className="calendar-row" key={row}>
-                    <div className="calendar-time">{row % 2 === 0 ? labelForRow(row) : ''}</div>
-                    {WEEKDAYS.map((day) => {
+                <div className="calendar-corner">Day</div>
+                {TIME_ROWS.map((row) => <div className="calendar-time" key={row}>{row % 2 === 0 ? labelForRow(row) : ''}</div>)}
+                {WEEKDAYS.map((day) => (
+                  <div className="calendar-row" key={day}>
+                    <div className="calendar-day">{day}</div>
+                    {TIME_ROWS.map((row) => {
                       const selected = selectedCells.has(`${day}-${row}`)
                       return (
                         <button
@@ -323,7 +337,7 @@ export function Profile() {
                           data-day={day}
                           data-row={row}
                           disabled={savingSlots}
-                          key={day}
+                          key={row}
                           onClick={(event) => {
                             if (event.detail === 0) toggleCell(day, row)
                           }}

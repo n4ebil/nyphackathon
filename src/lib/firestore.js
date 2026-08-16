@@ -9,8 +9,39 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from '../firebase.js'
+
+// ---------------------------------------------------------------- student directory
+// Pre-imported roster (name + course by admin number) so registration can
+// auto-fill those fields. Doc id is the admin number, uppercased. Readable
+// without signing in — registration happens before an account exists — so
+// keep this to non-sensitive fields only (no email/contact info).
+
+export async function lookupStudent(adminNo) {
+  if (!adminNo) return null
+  const snap = await getDoc(doc(db, 'studentDirectory', adminNo.trim().toUpperCase()))
+  return snap.exists() ? snap.data() : null
+}
+
+export async function listDirectory() {
+  const snap = await getDocs(collection(db, 'studentDirectory'))
+  return snap.docs.map((d) => d.data())
+}
+
+/** Firestore batches cap at 500 writes, so chunk large imports. */
+export async function importDirectoryRows(rows) {
+  const chunks = []
+  for (let i = 0; i < rows.length; i += 450) chunks.push(rows.slice(i, i + 450))
+  for (const chunk of chunks) {
+    const batch = writeBatch(db)
+    for (const row of chunk) {
+      batch.set(doc(db, 'studentDirectory', row.adminNo), row)
+    }
+    await batch.commit()
+  }
+}
 
 // ---------------------------------------------------------------- users
 

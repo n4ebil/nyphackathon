@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
+import { Icon } from '../components/Icon.jsx'
+import { lookupStudent } from '../lib/firestore.js'
 import { NYP_COURSE_CATALOG } from '../shared/nyp.ts'
 
 export function Register() {
@@ -20,6 +22,7 @@ export function Register() {
   })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [directoryStatus, setDirectoryStatus] = useState('') // '' | 'checking' | 'found' | 'not-found'
 
   if (loading) {
     return (
@@ -36,11 +39,29 @@ export function Register() {
 
   function onAdminNoChange(e) {
     const adminNo = e.target.value
+    setDirectoryStatus('')
     setForm((f) => ({
       ...f,
       adminNo,
       email: f.email && f.email !== suggestedEmail(f.adminNo) ? f.email : suggestedEmail(adminNo),
     }))
+  }
+
+  async function onAdminNoBlur() {
+    const adminNo = form.adminNo.trim()
+    if (!adminNo || !configured) return
+    setDirectoryStatus('checking')
+    try {
+      const match = await lookupStudent(adminNo)
+      if (match) {
+        setForm((f) => ({ ...f, name: match.name || f.name, course: match.course || f.course, year: match.year || f.year }))
+        setDirectoryStatus('found')
+      } else {
+        setDirectoryStatus('not-found')
+      }
+    } catch {
+      setDirectoryStatus('not-found')
+    }
   }
 
   async function onSubmit(e) {
@@ -95,7 +116,24 @@ export function Register() {
             </label>
             <label className="field">
               Admin number
-              <input required value={form.adminNo} onChange={onAdminNoChange} placeholder="231045A" disabled={!configured} />
+              <input
+                required
+                value={form.adminNo}
+                onChange={onAdminNoChange}
+                onBlur={onAdminNoBlur}
+                placeholder="231045A"
+                disabled={!configured}
+              />
+              {directoryStatus === 'checking' && (
+                <span className="directory-hint">
+                  <Spinner /> Checking…
+                </span>
+              )}
+              {directoryStatus === 'found' && (
+                <span className="directory-hint found">
+                  <Icon name="check" size={13} /> Found — name and course filled in
+                </span>
+              )}
             </label>
           </div>
 

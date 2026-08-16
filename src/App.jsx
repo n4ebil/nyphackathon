@@ -7,6 +7,7 @@ import { Register } from './pages/Register.jsx'
 import { Dashboard } from './pages/Dashboard.jsx'
 import { Requests } from './pages/Requests.jsx'
 import { Profile } from './pages/Profile.jsx'
+import { Directory } from './pages/Directory.jsx'
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/requests" element={<Requests />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/admin/directory" element={<Directory />} />
           </Route>
         </Route>
 

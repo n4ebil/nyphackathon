@@ -45,5 +45,15 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn();
     }
+
+    // Pre-imported roster used to auto-fill name/course at registration — read
+    // has to be public since that happens before an account exists. Only
+    // non-sensitive fields belong here (no email/contact info) for that reason.
+    // Write is open to any signed-in user for now (no admin/HR role exists yet) —
+    // tighten this to a specific allowlisted account before relying on it for real.
+    match /studentDirectory/{adminNo} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
   }
 }
