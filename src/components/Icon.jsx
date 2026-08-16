@@ -14,6 +14,10 @@ const PATHS = {
   check: 'm5 12 5 5 9-9',
   logout: 'M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3m6 14 5-5-5-5M20 12H9',
   trash: 'M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13',
+  edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
+  download: 'M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
+  lock: 'M6 10V8a6 6 0 0 1 12 0v2 M5 10h14a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9a1 1 0 0 1 1-1Z',
+  unlock: 'M6 10V8a6 6 0 0 1 11.5-2.5 M5 10h14a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9a1 1 0 0 1 1-1Z',
 }
 
 export function Icon({ name, size = 20 }) {

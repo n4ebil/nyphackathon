@@ -32,6 +32,12 @@ export function AuthProvider({ children }) {
       } catch (err) {
         console.error('Could not load profile from Firestore.', err)
       }
+      if (profile?.locked) {
+        await signOut(auth)
+        setUser(null)
+        setLoading(false)
+        return
+      }
       // A failed/empty fetch shouldn't erase profile fields `register()` already set
       // locally (e.g. while this same listener fires from the sign-up itself).
       setUser((prev) => ({ userId: fbUser.uid, email: fbUser.email, ...(prev?.userId === fbUser.uid ? prev : null), ...profile }))
@@ -41,10 +47,20 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(async (email, password) => {
+    let credential
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      credential = await signInWithEmailAndPassword(auth, email, password)
     } catch (err) {
       throw new Error(friendlyAuthError(err))
+    }
+    const profile = await getUserProfile(credential.user.uid).catch(() => null)
+    if (profile?.locked) {
+      await signOut(auth)
+      throw new Error('This account has been locked.')
+    }
+    if (!profile) {
+      await signOut(auth)
+      throw new Error('This account no longer exists.')
     }
   }, [])
 

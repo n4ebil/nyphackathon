@@ -59,6 +59,17 @@ export async function listUsers() {
   return snap.docs.map((d) => ({ userId: d.id, ...d.data() }))
 }
 
+/**
+ * Deletes the Firestore profile only — there's no Admin SDK/backend here, so
+ * the Firebase Auth account itself can't be deleted or disabled client-side.
+ * Combined with the `locked` flag (enforced in AuthContext), this is the
+ * practical equivalent: a deleted/locked user can still authenticate but the
+ * app treats them as having no usable profile and signs them straight out.
+ */
+export async function deleteUserProfile(userId) {
+  await deleteDoc(doc(db, 'users', userId))
+}
+
 // ---------------------------------------------------------------- teaching subjects
 
 export async function getTeachingSubjects(userId) {

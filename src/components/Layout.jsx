@@ -6,7 +6,7 @@ import { Avatar } from './Avatar.jsx'
 const NAV = [
   ['/dashboard', 'Dashboard', 'home'],
   ['/requests', 'My sessions', 'calendar'],
-  ['/profile', 'Profile', 'user'],
+  ['/admin/directory', 'Admin Page', 'user'],
 ]
 
 export function Layout() {
@@ -23,6 +23,7 @@ export function Layout() {
           </span>
         </div>
         <nav>
+          <p className="nav-heading">Workspace</p>
           {NAV.map(([to, label, icon]) => (
             <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
               <Icon name={icon} />
@@ -38,11 +39,13 @@ export function Layout() {
             Become a tutor
           </button>
           <div className="user-row">
-            <Avatar name={user?.name || user?.email} id={user?.userId} small />
-            <div>
-              <b>{user?.name || 'Your profile'}</b>
-              <small>{user?.course || user?.email}</small>
-            </div>
+            <NavLink to="/profile" className={({ isActive }) => `profile-link${isActive ? ' active' : ''}`}>
+              <Avatar name={user?.name || user?.email} id={user?.userId} small />
+              <div>
+                <b>{user?.name || 'Your profile'}</b>
+                <small>{user?.course || user?.email}</small>
+              </div>
+            </NavLink>
             <button className="more" title="Sign out" onClick={logout}>
               <Icon name="logout" size={15} />
             </button>
