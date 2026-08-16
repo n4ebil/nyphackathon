@@ -13,14 +13,8 @@ import {
   unregisterInterest,
 } from '../lib/firestore.js'
 
-const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-const LT_NUMBERS = Array.from({ length: 12 }, (_, i) => i + 1)
-
-/** LT-01 / LT-02 for lecture theatres, or L.<level><room> (e.g. L.643 = level 6, room 43) for classrooms. */
-function formatLocation(loc) {
-  if (loc.type === 'lt') return `LT-${String(loc.ltNumber).padStart(2, '0')}`
-  return `L.${loc.level}${String(loc.room || '00').padStart(2, '0')}`
-}
+const LT_ROOMS = ['LT-01', 'LT-02', 'LT-03']
+const CLASSROOMS = ['L501', 'L502', 'L503', 'L504', 'L505', 'L601', 'L602', 'L603', 'L604', 'L605']
 
 function formatDate(iso) {
   if (!iso) return ''
@@ -42,9 +36,7 @@ export function Schedule() {
     startTime: '14:00',
     endTime: '15:00',
     locationType: 'lt',
-    ltNumber: 1,
-    level: 6,
-    room: '',
+    location: LT_ROOMS[0],
     notes: '',
   })
 
@@ -70,10 +62,6 @@ export function Schedule() {
   async function onCreate(e) {
     e.preventDefault()
     if (!form.title.trim() || !form.date) return
-    if (form.locationType === 'classroom' && !form.room) {
-      setError('Enter a room number.')
-      return
-    }
     setCreating(true)
     setError('')
     try {
@@ -84,12 +72,10 @@ export function Schedule() {
         date: form.date,
         startTime: form.startTime,
         endTime: form.endTime,
-        location: formatLocation(
-          form.locationType === 'lt' ? { type: 'lt', ltNumber: form.ltNumber } : { type: 'classroom', level: form.level, room: form.room },
-        ),
+        location: form.location,
         notes: form.notes.trim(),
       })
-      setForm((f) => ({ ...f, title: '', date: '', notes: '', room: '' }))
+      setForm((f) => ({ ...f, title: '', date: '', notes: '' }))
       await load()
     } catch (err) {
       setError(err.message || 'Could not open that class.')
@@ -128,9 +114,6 @@ export function Schedule() {
   }
 
   const interestsFor = (classId) => interests.filter((i) => i.classId === classId)
-  const previewLocation = formatLocation(
-    form.locationType === 'lt' ? { type: 'lt', ltNumber: form.ltNumber } : { type: 'classroom', level: form.level, room: form.room },
-  )
 
   return (
     <>
@@ -175,57 +158,33 @@ export function Schedule() {
           <label className="field">
             Location
             <div className="location-type">
-              <button type="button" className={form.locationType === 'lt' ? 'active' : ''} onClick={() => setForm((f) => ({ ...f, locationType: 'lt' }))}>
+              <button
+                type="button"
+                className={form.locationType === 'lt' ? 'active' : ''}
+                onClick={() => setForm((f) => ({ ...f, locationType: 'lt', location: LT_ROOMS[0] }))}
+              >
                 Lecture Theatre
               </button>
               <button
                 type="button"
                 className={form.locationType === 'classroom' ? 'active' : ''}
-                onClick={() => setForm((f) => ({ ...f, locationType: 'classroom' }))}
+                onClick={() => setForm((f) => ({ ...f, locationType: 'classroom', location: CLASSROOMS[0] }))}
               >
                 Classroom
               </button>
             </div>
           </label>
 
-          {form.locationType === 'lt' ? (
-            <label className="field">
-              Lecture Theatre number
-              <select value={form.ltNumber} onChange={(e) => setForm((f) => ({ ...f, ltNumber: Number(e.target.value) }))}>
-                {LT_NUMBERS.map((n) => (
-                  <option key={n} value={n}>
-                    LT-{String(n).padStart(2, '0')}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <div className="form-grid">
-              <label className="field">
-                Level
-                <select value={form.level} onChange={(e) => setForm((f) => ({ ...f, level: Number(e.target.value) }))}>
-                  {LEVELS.map((l) => (
-                    <option key={l} value={l}>
-                      Level {l}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                Room number
-                <input
-                  required
-                  value={form.room}
-                  onChange={(e) => setForm((f) => ({ ...f, room: e.target.value.replace(/\D/g, '').slice(0, 2) }))}
-                  placeholder="43"
-                />
-              </label>
-            </div>
-          )}
-
-          <p className="recommend-copy">
-            Will be listed as <b>{previewLocation}</b>.
-          </p>
+          <label className="field">
+            {form.locationType === 'lt' ? 'Lecture Theatre' : 'Classroom'}
+            <select value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}>
+              {(form.locationType === 'lt' ? LT_ROOMS : CLASSROOMS).map((room) => (
+                <option key={room} value={room}>
+                  {room}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="field">
             Notes (optional)
