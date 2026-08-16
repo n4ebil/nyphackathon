@@ -137,7 +137,7 @@ export function Dashboard() {
           {matches.length === 0 ? (
             <div className="empty-state">
               <span className="empty-icon">🔍</span>
-              <p>No one on PeerLink teaches this yet. Try a different topic, or check back once more classmates have set up their tutor profile.</p>
+              <p>No one on NYPkaki teaches this yet. Try a different topic, or check back once more classmates have set up their tutor profile.</p>
             </div>
           ) : (
             <div className="match-list">
@@ -185,16 +185,16 @@ export function Dashboard() {
           <section className="find-section">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">PEOPLE ON PEERLINK</p>
+                <p className="eyebrow">PEOPLE ON NYPKAKI</p>
                 <h2>Classmates ready to help</h2>
-                <p className="recommend-copy">Describe what you need above and PeerLink ranks everyone for you</p>
+                <p className="recommend-copy">Describe what you need above and NYPkaki ranks everyone for you</p>
               </div>
             </div>
 
             {peers.length === 0 ? (
               <div className="empty-state">
                 <span className="empty-icon">🎓</span>
-                <p>No one else has joined PeerLink yet. Once classmates sign up, they'll show up here.</p>
+                <p>No one else has joined NYPkaki yet. Once classmates sign up, they'll show up here.</p>
               </div>
             ) : (
               <div className="tutor-grid">
@@ -204,7 +204,7 @@ export function Dashboard() {
                       <Avatar name={p.name || p.email} id={p.userId} />
                     </div>
                     <div className="tutor-name">
-                      <h3>{p.name || 'A PeerLink student'}</h3>
+                      <h3>{p.name || 'A NYPkaki student'}</h3>
                     </div>
                     <p className="course">
                       {p.course || 'Course not set yet'} {p.year && <><b>•</b> Year {p.year}</>}
@@ -233,7 +233,7 @@ function MatchCard({ match, open, sent, busy, onToggle, onSend }) {
       <div className="match-card-top">
         <Avatar name={match.tutor.name || match.tutor.email} id={match.tutorId} />
         <div className="match-card-info">
-          <h3>{match.tutor.name || 'A PeerLink student'}</h3>
+          <h3>{match.tutor.name || 'A NYPkaki student'}</h3>
           <p className="course">
             {match.tutor.course || 'Course not set yet'} {match.tutor.year && <><b>•</b> Year {match.tutor.year}</>}
           </p>

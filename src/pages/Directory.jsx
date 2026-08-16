@@ -116,7 +116,7 @@ export function Directory() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'peerlink-students.csv'
+    a.download = 'nypkaki-students.csv'
     a.click()
     URL.revokeObjectURL(url)
   }

@@ -38,9 +38,9 @@ export function Login() {
     <div className="auth-shell">
       <div className="auth-card">
         <div className="brand">
-          <div className="brand-mark">P</div>
+          <div className="brand-mark">N</div>
           <span>
-            peer<span>link</span>
+            NYP<span>kaki</span>
           </span>
         </div>
         <h1>Welcome back</h1>
@@ -69,7 +69,7 @@ export function Login() {
         </form>
 
         <p className="auth-switch">
-          New to PeerLink? <Link to="/register">Create an account</Link>
+          New to NYPkaki? <Link to="/register">Create an account</Link>
         </p>
       </div>
     </div>

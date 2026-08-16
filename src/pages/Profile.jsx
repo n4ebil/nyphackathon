@@ -249,7 +249,7 @@ export function Profile() {
         <div>
           <p className="eyebrow">YOUR PROFILE</p>
           <h1>Keep your details current</h1>
-          <p className="sub">This is what classmates see when PeerLink matches you.</p>
+          <p className="sub">This is what classmates see when NYPkaki matches you.</p>
         </div>
       </div>
 

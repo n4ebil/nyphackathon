@@ -107,9 +107,9 @@ export function Register() {
     <div className="auth-shell">
       <div className="auth-card wide">
         <div className="brand">
-          <div className="brand-mark">P</div>
+          <div className="brand-mark">N</div>
           <span>
-            peer<span>link</span>
+            NYP<span>kaki</span>
           </span>
         </div>
         <h1>Create your account</h1>

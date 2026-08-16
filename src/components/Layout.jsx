@@ -17,9 +17,9 @@ export function Layout() {
     <div className="app-shell">
       <aside>
         <div className="brand">
-          <div className="brand-mark">P</div>
+          <div className="brand-mark">N</div>
           <span>
-            peer<span>link</span>
+            NYP<span>kaki</span>
           </span>
         </div>
         <nav>
@@ -55,8 +55,8 @@ export function Layout() {
       <main>
         <header>
           <div className="mobile-brand">
-            <div className="brand-mark">P</div>
-            peer<span>link</span>
+            <div className="brand-mark">N</div>
+            NYP<span>kaki</span>
           </div>
           <div className="header-actions">
             <button className="notify">

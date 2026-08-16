@@ -1,8 +1,8 @@
-# PeerLink
+# NYPkaki
 
-Peer tutoring matching app. The matching algorithm, NLP request parser, and
-NYP reference data live in [src/shared](src/shared), copied from the original
-`awaws` project and treated as a read-only logic library, not UI code.
+NYP peer tutoring matching app. The matching algorithm, NLP request parser,
+and NYP reference data live in [src/shared](src/shared), copied from the
+original `awaws` project and treated as a read-only logic library, not UI code.
 
 ## Run it
 
@@ -36,7 +36,7 @@ everything past sign-in requires a real project.
 
 ## AI-parsed requests (optional, free)
 
-The "What do you need help with?" box on Find a Tutor can use Gemini to pick
+The "What do you need help with?" box on the Dashboard can use Gemini to pick
 which competency a free-text request is about, via **Firebase AI Logic**
 (client-side, no server, no exposed key — billed through the free Gemini
 Developer API tier, not the paid Vertex AI one).
@@ -77,5 +77,5 @@ src/
 │   └── match.js          Bridges Firestore data into shared/'s matching engine
 ├── shared/               Matching algorithm, NLP parser, NYP data (logic only, no UI)
 ├── components/           Layout (sidebar/header), Icon, Avatar, Spinner/Banner
-└── pages/                Login, Register, Dashboard, FindTutor, Requests, Profile
+└── pages/                Login, Register, Dashboard, Requests, Profile, Directory (admin)
 ```
