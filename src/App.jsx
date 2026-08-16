@@ -1,7 +1,7 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { Layout } from './components/Layout.jsx'
-import { Spinner } from './components/Spinner.jsx'
+import { AppLoader } from './components/AppLoader.jsx'
 import { Login } from './pages/Login.jsx'
 import { Register } from './pages/Register.jsx'
 import { Dashboard } from './pages/Dashboard.jsx'
@@ -35,13 +35,7 @@ function RequireAuth() {
   const { user, loading, configured } = useAuth()
 
   if (!configured) return <Navigate to="/login" replace />
-  if (loading) {
-    return (
-      <div className="app-loading">
-        <Spinner />
-      </div>
-    )
-  }
+  if (loading) return <AppLoader />
   if (!user) return <Navigate to="/login" replace />
   return <Outlet />
 }

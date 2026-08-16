@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { Banner, Spinner } from '../components/Spinner.jsx'
+import { Banner } from '../components/Spinner.jsx'
+import { AppLoader } from '../components/AppLoader.jsx'
 import { arrangeSession, getSessionsByMatchIds, listMatchRequests, respondToMatchRequest } from '../lib/firestore.js'
 
 export function Requests() {
@@ -74,9 +75,7 @@ export function Requests() {
       {error && <Banner kind="error">{error}</Banner>}
 
       {loading ? (
-        <div className="app-loading small">
-          <Spinner />
-        </div>
+        <AppLoader compact />
       ) : (
         <div className="summary">
           <div className="requests">

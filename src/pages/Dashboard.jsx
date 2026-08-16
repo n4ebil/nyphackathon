@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/Avatar.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
+import { AppLoader } from '../components/AppLoader.jsx'
 import { getSessionsByMatchIds, listMatchRequests, listUsers, sendMatchRequest } from '../lib/firestore.js'
 import { computeMatches, submitLearningRequest } from '../lib/match.js'
 
@@ -160,9 +161,7 @@ export function Dashboard() {
       {loadError && <Banner kind="error">{loadError}</Banner>}
 
       {loading ? (
-        <div className="app-loading small">
-          <Spinner />
-        </div>
+        <AppLoader compact />
       ) : (
         <>
           {nextSession && (

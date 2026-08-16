@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
+import { AppLoader } from '../components/AppLoader.jsx'
 
 export function Login() {
   const { user, loading, configured, login } = useAuth()
@@ -11,13 +12,7 @@ export function Login() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  if (loading) {
-    return (
-      <div className="app-loading">
-        <Spinner />
-      </div>
-    )
-  }
+  if (loading) return <AppLoader />
   if (user) return <Navigate to="/dashboard" replace />
 
   function onEmailBlur() {

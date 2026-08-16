@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
+import { AppLoader } from '../components/AppLoader.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { lookupStudent } from '../lib/firestore.js'
 import { NYP_COURSE_CATALOG, schoolsForCourse } from '../shared/nyp.ts'
@@ -25,13 +26,7 @@ export function Register() {
   const [busy, setBusy] = useState(false)
   const [directoryStatus, setDirectoryStatus] = useState('') // '' | 'checking' | 'found' | 'not-found'
 
-  if (loading) {
-    return (
-      <div className="app-loading">
-        <Spinner />
-      </div>
-    )
-  }
+  if (loading) return <AppLoader />
   if (user) return <Navigate to="/dashboard" replace />
 
   function set(key) {
