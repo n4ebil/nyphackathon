@@ -1,0 +1,122 @@
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
+import { db } from '../firebase.js'
+
+// ---------------------------------------------------------------- users
+
+export async function getUserProfile(uid) {
+  const snap = await getDoc(doc(db, 'users', uid))
+  return snap.exists() ? { userId: uid, ...snap.data() } : null
+}
+
+export async function upsertUserProfile(uid, data) {
+  await setDoc(doc(db, 'users', uid), data, { merge: true })
+}
+
+export async function listUsers() {
+  const snap = await getDocs(collection(db, 'users'))
+  return snap.docs.map((d) => ({ userId: d.id, ...d.data() }))
+}
+
+// ---------------------------------------------------------------- teaching subjects
+
+export async function getTeachingSubjects(userId) {
+  const snap = await getDocs(query(collection(db, 'teachingSubjects'), where('userId', '==', userId)))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export async function listAllTeachingSubjects() {
+  const snap = await getDocs(collection(db, 'teachingSubjects'))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+/** Swaps a user's whole teaching list in one go — simplest correct model for a small self-reported list. */
+export async function replaceTeachingSubjects(userId, subjects) {
+  const existing = await getTeachingSubjects(userId)
+  await Promise.all(existing.map((s) => deleteDoc(doc(db, 'teachingSubjects', s.id))))
+  await Promise.all(subjects.map((s) => addDoc(collection(db, 'teachingSubjects'), { ...s, userId })))
+}
+
+// ---------------------------------------------------------------- availability
+
+export async function getAvailability(userId) {
+  const snap = await getDocs(query(collection(db, 'availability'), where('userId', '==', userId)))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export async function listAllAvailability() {
+  const snap = await getDocs(collection(db, 'availability'))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export async function replaceAvailability(userId, slots) {
+  const existing = await getAvailability(userId)
+  await Promise.all(existing.map((s) => deleteDoc(doc(db, 'availability', s.id))))
+  await Promise.all(slots.map((s) => addDoc(collection(db, 'availability'), { ...s, userId })))
+}
+
+// ---------------------------------------------------------------- learning requests
+
+export async function createLearningRequest(request) {
+  const ref = await addDoc(collection(db, 'learningRequests'), request)
+  return { requestId: ref.id, ...request }
+}
+
+export async function listAllLearningRequests() {
+  const snap = await getDocs(collection(db, 'learningRequests'))
+  return snap.docs.map((d) => ({ requestId: d.id, ...d.data() }))
+}
+
+// ---------------------------------------------------------------- match requests
+
+/** matchId (from findMatches, `${requestId}--${tutorId}`) is used as the doc id so a match can only be requested once. */
+export async function sendMatchRequest(matchRequest) {
+  await setDoc(doc(db, 'matchRequests', matchRequest.matchId), matchRequest)
+}
+
+export async function listMatchRequests(userId) {
+  const [incoming, outgoing] = await Promise.all([
+    getDocs(query(collection(db, 'matchRequests'), where('tutorId', '==', userId))),
+    getDocs(query(collection(db, 'matchRequests'), where('studentId', '==', userId))),
+  ])
+  return {
+    incoming: incoming.docs.map((d) => d.data()),
+    outgoing: outgoing.docs.map((d) => d.data()),
+  }
+}
+
+export async function respondToMatchRequest(matchId, status) {
+  await updateDoc(doc(db, 'matchRequests', matchId), { status })
+}
+
+// ---------------------------------------------------------------- sessions
+
+export async function getSessionsByMatchIds(matchIds) {
+  const snaps = await Promise.all(matchIds.map((id) => getDoc(doc(db, 'sessions', id))))
+  return snaps.filter((s) => s.exists()).map((s) => s.data())
+}
+
+export async function arrangeSession(matchId, details = {}) {
+  const session = {
+    matchId,
+    day: details.day || 'Sat',
+    startTime: details.startTime || '14:00',
+    endTime: details.endTime || '15:00',
+    format: details.format || 'in-person',
+    location: details.location || 'Campus library',
+    status: 'arranged',
+  }
+  await setDoc(doc(db, 'sessions', matchId), session)
+  await respondToMatchRequest(matchId, 'accepted')
+  return session
+}

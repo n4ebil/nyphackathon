@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /teachingSubjects/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /availability/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /learningRequests/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Doc id is the matchId (`${requestId}--${tutorId}`) — set by the student.
+    match /matchRequests/{matchId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if signedIn() && resource.data.tutorId == request.auth.uid;
+    }
+
+    // Doc id is the matchId it was arranged from — only the two people in that match can write it.
+    match /sessions/{matchId} {
+      allow read: if signedIn();
+      allow write: if signedIn() &&
+        exists(/databases/$(database)/documents/matchRequests/$(matchId)) &&
+        (get(/databases/$(database)/documents/matchRequests/$(matchId)).data.tutorId == request.auth.uid ||
+         get(/databases/$(database)/documents/matchRequests/$(matchId)).data.studentId == request.auth.uid);
+    }
+
+    match /feedback/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+    }
+  }
+}
