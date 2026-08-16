@@ -162,3 +162,40 @@ export async function arrangeSession(matchId, details = {}) {
   await respondToMatchRequest(matchId, 'accepted')
   return session
 }
+
+// ---------------------------------------------------------------- extra classes
+// A teacher opens a one-off extra class; anyone can register interest in
+// attending. Separate from the 1:1 matched sessions above.
+
+export async function createClassSession(classSession) {
+  const ref = await addDoc(collection(db, 'classSessions'), classSession)
+  return { classId: ref.id, ...classSession }
+}
+
+export async function listClassSessions() {
+  const snap = await getDocs(collection(db, 'classSessions'))
+  return snap.docs.map((d) => ({ classId: d.id, ...d.data() }))
+}
+
+export async function deleteClassSession(classId) {
+  await deleteDoc(doc(db, 'classSessions', classId))
+}
+
+/** Doc id is `${classId}--${userId}` so registering twice just no-ops instead of duplicating. */
+export async function registerInterest(classId, userId, userName) {
+  await setDoc(doc(db, 'classInterests', `${classId}--${userId}`), {
+    classId,
+    userId,
+    userName,
+    createdAt: new Date().toISOString(),
+  })
+}
+
+export async function unregisterInterest(classId, userId) {
+  await deleteDoc(doc(db, 'classInterests', `${classId}--${userId}`))
+}
+
+export async function listAllClassInterests() {
+  const snap = await getDocs(collection(db, 'classInterests'))
+  return snap.docs.map((d) => d.data())
+}

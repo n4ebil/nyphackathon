@@ -7,6 +7,7 @@ import { Register } from './pages/Register.jsx'
 import { Dashboard } from './pages/Dashboard.jsx'
 import { Requests } from './pages/Requests.jsx'
 import { Profile } from './pages/Profile.jsx'
+import { Schedule } from './pages/Schedule.jsx'
 import { Directory } from './pages/Directory.jsx'
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/requests" element={<Requests />} />
+            <Route path="/schedule" element={<Schedule />} />
             <Route path="/profile" element={<Profile />} />
             <Route element={<RequireAdmin />}>
               <Route path="/admin/directory" element={<Directory />} />

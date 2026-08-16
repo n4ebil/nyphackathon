@@ -6,6 +6,7 @@ import { Avatar } from './Avatar.jsx'
 const NAV = [
   ['/dashboard', 'Dashboard', 'home'],
   ['/requests', 'My sessions', 'calendar'],
+  ['/schedule', 'Schedule', 'book'],
 ]
 
 export function Layout() {
