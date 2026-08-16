@@ -2,14 +2,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    // Keep in sync with ADMIN_EMAILS in src/lib/admin.js — this is the actual
+    // enforcement; the client-side check just keeps non-admins from seeing the page.
+    function isAdmin() { return signedIn() && request.auth.token.email == 'demo@peerlink.app'; }
 
-    // A user can always write their own profile. Any signed-in user can also
-    // write/delete *someone else's* — needed for the admin page's edit/lock/delete
-    // actions, since there's no admin/HR role yet (same gap as studentDirectory
-    // below). Tighten to a specific allowlisted account before relying on this.
+    // A user can always write their own profile. The admin page's edit/lock/delete
+    // actions need to write *someone else's*, so admins can too.
     match /users/{userId} {
       allow read: if signedIn();
-      allow write, delete: if signedIn();
+      allow write, delete: if signedIn() && (request.auth.uid == userId || isAdmin());
     }
 
     match /teachingSubjects/{docId} {
@@ -53,11 +54,9 @@ service cloud.firestore {
     // Pre-imported roster used to auto-fill name/course at registration — read
     // has to be public since that happens before an account exists. Only
     // non-sensitive fields belong here (no email/contact info) for that reason.
-    // Write is open to any signed-in user for now (no admin/HR role exists yet) —
-    // tighten this to a specific allowlisted account before relying on it for real.
     match /studentDirectory/{adminNo} {
       allow read: if true;
-      allow write: if signedIn();
+      allow write: if isAdmin();
     }
   }
 }

@@ -3,6 +3,7 @@ import { Banner, Spinner } from '../components/Spinner.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { deleteUserProfile, importDirectoryRows, listDirectory, listUsers, upsertUserProfile } from '../lib/firestore.js'
 import { parseStudentDirectory } from '../lib/csv.js'
+import { ADMIN_EMAILS } from '../lib/admin.js'
 import { NYP_COURSE_CATALOG, schoolsForCourse } from '../shared/nyp.ts'
 
 export function Directory() {
@@ -190,8 +191,8 @@ export function Directory() {
       </div>
 
       <Banner kind="info">
-        This page isn't linked from the sidebar and isn't access-controlled yet — anyone signed in who has the URL can
-        import. Fine for getting a roster loaded now; worth locking down before relying on it for real.
+        Access is limited to {ADMIN_EMAILS.join(', ')} — enforced both here and in the Firestore rules, so it holds
+        even if someone finds the URL directly. Add more emails in <code>src/lib/admin.js</code> if others need in.
       </Banner>
 
       {error && <Banner kind="error">{error}</Banner>}

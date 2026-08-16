@@ -6,12 +6,12 @@ import { Avatar } from './Avatar.jsx'
 const NAV = [
   ['/dashboard', 'Dashboard', 'home'],
   ['/requests', 'My sessions', 'calendar'],
-  ['/admin/directory', 'Admin Page', 'user'],
 ]
 
 export function Layout() {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const nav = isAdmin ? [...NAV, ['/admin/directory', 'Admin Page', 'user']] : NAV
 
   return (
     <div className="app-shell">
@@ -24,7 +24,7 @@ export function Layout() {
         </div>
         <nav>
           <p className="nav-heading">Workspace</p>
-          {NAV.map(([to, label, icon]) => (
+          {nav.map(([to, label, icon]) => (
             <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
               <Icon name={icon} />
               {label}

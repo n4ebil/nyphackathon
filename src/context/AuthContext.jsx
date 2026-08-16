@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth'
 import { auth, isFirebaseConfigured } from '../firebase.js'
 import { getUserProfile, upsertUserProfile } from '../lib/firestore.js'
+import { isAdminEmail } from '../lib/admin.js'
 
 const AuthContext = createContext(null)
 
@@ -92,7 +93,16 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, configured: isFirebaseConfigured, login, register, logout, refreshProfile }),
+    () => ({
+      user,
+      loading,
+      configured: isFirebaseConfigured,
+      isAdmin: isAdminEmail(user?.email),
+      login,
+      register,
+      logout,
+      refreshProfile,
+    }),
     [user, loading, login, register, logout, refreshProfile],
   )
 

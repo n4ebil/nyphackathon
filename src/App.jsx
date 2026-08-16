@@ -21,7 +21,9 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/requests" element={<Requests />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/admin/directory" element={<Directory />} />
+            <Route element={<RequireAdmin />}>
+              <Route path="/admin/directory" element={<Directory />} />
+            </Route>
           </Route>
         </Route>
 
@@ -37,5 +39,12 @@ function RequireAuth() {
   if (!configured) return <Navigate to="/login" replace />
   if (loading) return <AppLoader />
   if (!user) return <Navigate to="/login" replace />
+  return <Outlet />
+}
+
+/** Kicks non-admins back to the dashboard — the real gate is Firestore rules, this just stops them getting to the page at all. */
+function RequireAdmin() {
+  const { isAdmin } = useAuth()
+  if (!isAdmin) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
