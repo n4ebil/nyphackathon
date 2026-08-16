@@ -2,28 +2,33 @@
 
 /* ---------------------------------------------------------------- tokens */
 :root {
-  --ink: #241f3d;
-  --muted: #726f8c;
+  --ink: #201c33;
+  --muted: #6b6884;
   --muted-soft: #8f8ca6;
   --line: #ece7f6;
-  --blue: #5b5fef;
-  --blue-dark: #4749d1;
-  --navy: #241f3d;
-  --lav: #f1eefc;
-  --bg: #faf8ff;
-  --coral: #ff7a59;
-  --coral-light: #fff1ec;
-  --green: #1fa971;
-  --green-light: #e6f9ef;
-  --amber: #c98a1f;
-  --amber-light: #fff6e2;
-  --red: #d84f4c;
+
+  --blue: #4f46e5;
+  --blue-dark: #3d35c9;
+  --navy: #201c33;
+  --lav: #efecfd;
+  --bg: #faf9fc;
+
+  --coral: #fb7a4a;
+  --coral-light: #fff0e8;
+
+  --green: #12a56b;
+  --green-light: #e4f9ef;
+  --amber: #b8791a;
+  --amber-light: #fef3dc;
+  --red: #d3453f;
   --red-light: #fdeceb;
+
   --r-sm: 10px;
   --r-md: 16px;
   --r-lg: 22px;
-  --shadow-card: 0 8px 24px rgba(91, 95, 239, 0.07);
-  --shadow-hover: 0 16px 36px rgba(91, 95, 239, 0.14);
+
+  --shadow-card: 0 6px 20px rgba(32, 28, 51, 0.06);
+  --shadow-hover: 0 18px 40px rgba(79, 70, 229, 0.16);
 }
 
 * { box-sizing: border-box; }
