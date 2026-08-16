@@ -215,10 +215,12 @@ export function Schedule() {
             {requests.map((req) => {
               const attendees = interestsFor(req.requestId)
               const isIn = attendees.some((a) => a.userId === user.userId)
+              const isScheduled = req.status === 'scheduled'
               const isCreator = req.studentId === user.userId
+              const isAssignedTeacher = isScheduled && req.teacherId === user.userId
               const busy = busyId === req.requestId
               const isScheduling = schedulingId === req.requestId
-              const readyForTutor = req.status !== 'scheduled' && attendees.length >= MIN_INTEREST
+              const readyForTutor = !isScheduled && attendees.length >= MIN_INTEREST
               const matchedTutors = readyForTutor ? tutorsFor(req.moduleId) : []
               const iAmMatchedTutor = matchedTutors.some((t) => t.userId === user.userId)
 
@@ -313,23 +315,31 @@ export function Schedule() {
                     </div>
                   ) : (
                     <div className="match-card-actions">
-                      <span className="view-tutors">{attendees.length} interested</span>
-                      {req.status === 'scheduled' ? null : iAmMatchedTutor ? (
+                      <span className="view-tutors">{attendees.length} {isScheduled ? 'coming' : 'interested'}</span>
+                      {isAssignedTeacher ? (
+                        <span className="sent-tag">
+                          <Icon name="check" size={14} /> You're hosting
+                        </span>
+                      ) : iAmMatchedTutor ? (
                         <button className="card-btn inline" onClick={() => startScheduling(req)}>
                           Host this class
                         </button>
-                      ) : isCreator ? (
+                      ) : isCreator && !isScheduled ? (
                         <button className="card-btn inline danger-btn" onClick={() => cancelRequest(req)} disabled={busy}>
                           {busy ? <Spinner /> : 'Cancel request'}
                         </button>
                       ) : (
+                        // Anyone else — including people who missed the window before this hit
+                        // the interest threshold or got scheduled — can still join or drop out.
                         <button className={'card-btn inline' + (isIn ? ' sent' : '')} onClick={() => toggleInterest(req)} disabled={busy}>
                           {busy ? (
                             <Spinner />
                           ) : isIn ? (
                             <>
-                              <Icon name="check" size={14} /> You're in
+                              <Icon name="check" size={14} /> {isScheduled ? "You're coming" : "You're in"}
                             </>
+                          ) : isScheduled ? (
+                            "I'm coming"
                           ) : (
                             "I'm interested"
                           )}
