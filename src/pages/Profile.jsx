@@ -4,13 +4,17 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { getAvailability, getTeachingSubjects, replaceAvailability, replaceTeachingSubjects, upsertUserProfile } from '../lib/firestore.js'
-import { modulesForCourse } from '../shared/nyp.ts'
+import { modulesForCourse, NYP_COURSE_CATALOG, schoolsForCourse } from '../shared/nyp.ts'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FIRST_HOUR = 7
 const LAST_HOUR = 23
 const INTERVAL_MINUTES = 30
 const TIME_ROWS = Array.from({ length: ((LAST_HOUR - FIRST_HOUR) * 60) / INTERVAL_MINUTES }, (_, index) => index)
+
+function schoolForCourse(course) {
+  return schoolsForCourse(course)[0] || NYP_COURSE_CATALOG[0].school
+}
 
 function timeForRow(row) {
   const minutes = FIRST_HOUR * 60 + row * INTERVAL_MINUTES
@@ -61,7 +65,13 @@ function cellsToAvailability(cells) {
 
 export function Profile() {
   const { user, refreshProfile } = useAuth()
-  const [form, setForm] = useState({ name: user.name || '', course: user.course || '', bio: user.bio || '', preferredFormat: user.preferredFormat || 'either' })
+  const [form, setForm] = useState({
+    name: user.name || '',
+    school: user.school || schoolForCourse(user.course),
+    course: user.course || NYP_COURSE_CATALOG[0].courses[0],
+    bio: user.bio || '',
+    preferredFormat: user.preferredFormat || 'either',
+  })
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
 
@@ -231,6 +241,7 @@ export function Profile() {
 
   const courseModules = modulesForCourse(form.course)
   const selectedWindows = cellsToAvailability(selectedCells)
+  const schoolCourses = NYP_COURSE_CATALOG.find((group) => group.school === form.school)?.courses || []
 
   return (
     <>
@@ -261,10 +272,20 @@ export function Profile() {
               </select>
             </label>
           </div>
-          <label className="field">
-            Course
-            <input value={form.course} onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))} />
-          </label>
+          <div className="form-grid">
+            <label className="field">
+              School
+              <select value={form.school} onChange={(e) => setForm((f) => ({ ...f, school: e.target.value, course: NYP_COURSE_CATALOG.find((group) => group.school === e.target.value)?.courses[0] || '' }))}>
+                {NYP_COURSE_CATALOG.map(({ school }) => <option key={school} value={school}>{school}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              Course
+              <select value={form.course} onChange={(e) => setForm((f) => ({ ...f, course: e.target.value }))}>
+                {schoolCourses.map((course) => <option key={course} value={course}>{course}</option>)}
+              </select>
+            </label>
+          </div>
           <label className="field">
             Bio
             <textarea value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} />

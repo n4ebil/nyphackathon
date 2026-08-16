@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { lookupStudent } from '../lib/firestore.js'
-import { NYP_COURSE_CATALOG } from '../shared/nyp.ts'
+import { NYP_COURSE_CATALOG, schoolsForCourse } from '../shared/nyp.ts'
 
 export function Register() {
   const { user, loading, configured, register } = useAuth()
@@ -13,6 +13,7 @@ export function Register() {
     name: '',
     adminNo: '',
     email: '',
+    school: NYP_COURSE_CATALOG[0].school,
     course: NYP_COURSE_CATALOG[0].courses[0],
     year: 2,
     bio: '',
@@ -47,6 +48,12 @@ export function Register() {
     }))
   }
 
+  function selectSchool(e) {
+    const school = e.target.value
+    const course = NYP_COURSE_CATALOG.find((group) => group.school === school)?.courses[0] || ''
+    setForm((f) => ({ ...f, school, course }))
+  }
+
   async function onAdminNoBlur() {
     const adminNo = form.adminNo.trim()
     if (!adminNo || !configured) return
@@ -54,7 +61,13 @@ export function Register() {
     try {
       const match = await lookupStudent(adminNo)
       if (match) {
-        setForm((f) => ({ ...f, name: match.name || f.name, course: match.course || f.course, year: match.year || f.year }))
+        setForm((f) => ({
+          ...f,
+          name: match.name || f.name,
+          course: match.course || f.course,
+          school: match.course ? schoolsForCourse(match.course)[0] || f.school : f.school,
+          year: match.year || f.year,
+        }))
         setDirectoryStatus('found')
       } else {
         setDirectoryStatus('not-found')
@@ -76,6 +89,7 @@ export function Register() {
         password: form.password,
         name: form.name.trim(),
         adminNo: form.adminNo.trim().toUpperCase(),
+        school: form.school,
         course: form.course,
         year: Number(form.year),
         bio: form.bio.trim(),
@@ -139,19 +153,22 @@ export function Register() {
 
           <div className="form-grid">
             <label className="field">
+              School
+              <select value={form.school} onChange={selectSchool} disabled={!configured}>
+                {NYP_COURSE_CATALOG.map(({ school }) => <option key={school} value={school}>{school}</option>)}
+              </select>
+            </label>
+            <label className="field">
               Course
               <select value={form.course} onChange={set('course')} disabled={!configured}>
-                {NYP_COURSE_CATALOG.map(({ school, courses }) => (
-                  <optgroup key={school} label={school}>
-                    {courses.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </optgroup>
+                {(NYP_COURSE_CATALOG.find((group) => group.school === form.school)?.courses || []).map((course) => (
+                  <option key={course} value={course}>{course}</option>
                 ))}
               </select>
             </label>
+          </div>
+
+          <div className="form-grid">
             <label className="field">
               Year of study
               <select value={form.year} onChange={set('year')} disabled={!configured}>
