@@ -20,6 +20,13 @@ export function Login() {
   }
   if (user) return <Navigate to="/dashboard" replace />
 
+  function onEmailBlur() {
+    const value = email.trim()
+    if (value && !value.includes('@')) {
+      setEmail(`${value.toLowerCase()}@mymail.nyp.edu.sg`)
+    }
+  }
+
   async function onSubmit(e) {
     e.preventDefault()
     setError('')
@@ -57,7 +64,15 @@ export function Login() {
         <form onSubmit={onSubmit}>
           <label className="field">
             Email
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@mymail.nyp.edu.sg" disabled={!configured} />
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={onEmailBlur}
+              placeholder="you@mymail.nyp.edu.sg or admin number"
+              disabled={!configured}
+            />
           </label>
           <label className="field">
             Password
