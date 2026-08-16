@@ -59,12 +59,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // One-off extra classes a "teacher" (any signed-in user) opens; anyone can
-    // register interest. Doc id for interests is `${classId}--${userId}`.
-    match /classSessions/{classId} {
+    // A student requests help with a module; once enough interest piles up, a
+    // tutor who teaches it claims the request (status -> 'scheduled'). That
+    // claiming tutor isn't the creator, and there's no clean way to check
+    // "is a qualified tutor for this module" from rules without deterministic
+    // doc ids on teachingSubjects — so update is any signed-in user for now,
+    // same trade-off as elsewhere in this file. Doc id for interests is
+    // `${requestId}--${userId}`.
+    match /classRequests/{requestId} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.teacherId == request.auth.uid;
-      allow update, delete: if signedIn() && resource.data.teacherId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if signedIn();
+      allow delete: if signedIn() && resource.data.studentId == request.auth.uid;
     }
 
     match /classInterests/{interestId} {

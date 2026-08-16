@@ -163,36 +163,50 @@ export async function arrangeSession(matchId, details = {}) {
   return session
 }
 
-// ---------------------------------------------------------------- extra classes
-// A teacher opens a one-off extra class; anyone can register interest in
-// attending. Separate from the 1:1 matched sessions above.
+// ---------------------------------------------------------------- class requests
+// A student requests help with a module; others pile on interest. Once
+// enough interest builds up, it's surfaced to tutors who teach that module —
+// one of them can claim it, which schedules the actual class.
 
-export async function createClassSession(classSession) {
-  const ref = await addDoc(collection(db, 'classSessions'), classSession)
-  return { classId: ref.id, ...classSession }
+export async function createClassRequest(request) {
+  const ref = await addDoc(collection(db, 'classRequests'), request)
+  return { requestId: ref.id, ...request }
 }
 
-export async function listClassSessions() {
-  const snap = await getDocs(collection(db, 'classSessions'))
-  return snap.docs.map((d) => ({ classId: d.id, ...d.data() }))
+export async function listClassRequests() {
+  const snap = await getDocs(collection(db, 'classRequests'))
+  return snap.docs.map((d) => ({ requestId: d.id, ...d.data() }))
 }
 
-export async function deleteClassSession(classId) {
-  await deleteDoc(doc(db, 'classSessions', classId))
+/** A qualified tutor claims the request, locking in when/where it happens. */
+export async function scheduleClassRequest(requestId, details) {
+  await updateDoc(doc(db, 'classRequests', requestId), {
+    status: 'scheduled',
+    teacherId: details.teacherId,
+    teacherName: details.teacherName,
+    date: details.date,
+    startTime: details.startTime,
+    endTime: details.endTime,
+    location: details.location,
+  })
 }
 
-/** Doc id is `${classId}--${userId}` so registering twice just no-ops instead of duplicating. */
-export async function registerInterest(classId, userId, userName) {
-  await setDoc(doc(db, 'classInterests', `${classId}--${userId}`), {
-    classId,
+export async function deleteClassRequest(requestId) {
+  await deleteDoc(doc(db, 'classRequests', requestId))
+}
+
+/** Doc id is `${requestId}--${userId}` so registering twice just no-ops. */
+export async function registerInterest(requestId, userId, userName) {
+  await setDoc(doc(db, 'classInterests', `${requestId}--${userId}`), {
+    requestId,
     userId,
     userName,
     createdAt: new Date().toISOString(),
   })
 }
 
-export async function unregisterInterest(classId, userId) {
-  await deleteDoc(doc(db, 'classInterests', `${classId}--${userId}`))
+export async function unregisterInterest(requestId, userId) {
+  await deleteDoc(doc(db, 'classInterests', `${requestId}--${userId}`))
 }
 
 export async function listAllClassInterests() {

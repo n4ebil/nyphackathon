@@ -3,6 +3,7 @@ import { parseHelpRequest } from '../shared/nlp.ts'
 import { MODULES, modulesForCourse } from '../shared/nyp.ts'
 import { pickModuleWithAI } from './ai.js'
 import {
+  createClassRequest,
   createLearningRequest,
   getAvailability,
   listAllAvailability,
@@ -12,11 +13,12 @@ import {
 } from './firestore.js'
 
 /**
- * Parses free text into a learning request and saves it to Firestore.
- * AI (Gemini, if configured) picks the competency; everything else — topics,
- * urgency, deadline — is the local deterministic parser in shared/nlp.ts.
+ * Shared by both request flows below: AI (Gemini, if configured) picks the
+ * competency; topics are recomputed against whichever module actually got
+ * chosen, so they always describe that module rather than the local
+ * heuristic parser's (possibly different) first guess.
  */
-export async function submitLearningRequest(student, text) {
+async function resolveModuleAndTopics(student, text) {
   const parsed = parseHelpRequest(text, student.course)
   const aiModule = await pickModuleWithAI(text, student.course)
   const fallback = modulesForCourse(student.course)[0] || MODULES[0]
@@ -24,24 +26,53 @@ export async function submitLearningRequest(student, text) {
   const chosen =
     aiModule || (parsed.moduleId ? MODULES.find((m) => m.moduleId === parsed.moduleId) : null) || fallback
 
-  // Topics depend on which module ended up chosen — recompute against its own
-  // vocabulary so they always describe the module actually being requested.
   const lower = text.toLowerCase()
   const topics = chosen.topics.filter((t) => lower.includes(t.toLowerCase()))
 
-  const request = {
-    userId: student.userId,
+  return {
     moduleId: chosen.moduleId,
     moduleName: chosen.moduleName,
     topics: topics.length ? topics : chosen.topics.slice(0, 2),
+    parsed,
+    parsedBy: aiModule ? 'ai' : 'local',
+  }
+}
+
+/** Parses free text into a learning request and saves it to Firestore. */
+export async function submitLearningRequest(student, text) {
+  const { moduleId, moduleName, topics, parsed, parsedBy } = await resolveModuleAndTopics(student, text)
+
+  const request = {
+    userId: student.userId,
+    moduleId,
+    moduleName,
+    topics,
     description: text,
     urgency: parsed.urgency,
     deadline: parsed.deadline || null,
     preferredFormat: parsed.preferredFormat || student.preferredFormat || 'either',
     createdAt: new Date().toISOString(),
-    parsedBy: aiModule ? 'ai' : 'local',
+    parsedBy,
   }
   return createLearningRequest(request)
+}
+
+/** Parses free text into a class request (Schedule page) and saves it to Firestore. */
+export async function submitClassRequest(student, text) {
+  const { moduleId, moduleName, topics, parsedBy } = await resolveModuleAndTopics(student, text)
+
+  const request = {
+    studentId: student.userId,
+    studentName: student.name || student.email,
+    moduleId,
+    moduleName,
+    topics,
+    description: text,
+    status: 'collecting',
+    createdAt: new Date().toISOString(),
+    parsedBy,
+  }
+  return createClassRequest(request)
 }
 
 /** Ranks every other user against one learning request, using the shared deterministic scoring model. */
