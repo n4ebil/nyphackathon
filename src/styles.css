@@ -40,6 +40,8 @@ body {
   background-image: radial-gradient(circle at 15% 0%, #f1ecff 0%, transparent 45%),
                      radial-gradient(circle at 100% 20%, #fff2ec 0%, transparent 40%);
   background-attachment: fixed;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
 }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; border: 0; background: none; color: inherit; }
@@ -336,8 +338,9 @@ h1, h2, h3, p { margin-top: 0; }
 .empty-state .empty-icon { font-size: 32px; display: block; margin-bottom: 10px; }
 
 /* ---------------------------------------------------------------- forms */
-.field { font-size: 13px; font-weight: 700; display: grid; gap: 7px; margin-top: 16px; color: #453f5f; }
+.field { font-size: 13px; font-weight: 700; display: grid; gap: 7px; margin-top: 16px; color: #453f5f; min-width: 0; }
 .field input, .field select, .field textarea {
+  width: 100%; min-width: 0; box-sizing: border-box;
   border: 1.5px solid var(--line); border-radius: var(--r-sm); padding: 11px 13px;
   color: var(--ink); background: #fff; font: inherit; font-weight: 400;
   transition: border-color .15s, box-shadow .15s;
@@ -352,6 +355,7 @@ h1, h2, h3, p { margin-top: 0; }
 form input:disabled, form select:disabled, form textarea:disabled { background: #f8f7fc; color: #b5b1c7; }
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.form-grid > * { min-width: 0; }
 
 .check-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
 .check-list label {
