@@ -182,6 +182,10 @@ export async function completeSession(matchId) {
   await updateDoc(doc(db, 'sessions', matchId), { status: 'completed' })
 }
 
+export async function cancelSession(matchId) {
+  await updateDoc(doc(db, 'sessions', matchId), { status: 'cancelled' })
+}
+
 export async function saveSessionPlan(matchId, plan) {
   await updateDoc(doc(db, 'sessions', matchId), { plan })
 }

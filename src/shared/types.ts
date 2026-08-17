@@ -136,4 +136,6 @@ export interface MatchRequest {
   message: string
   status: 'pending' | 'accepted' | 'rejected'
   createdAt: string
+  /** Compatibility score at the moment the request was sent — undefined for requests sent before this field existed. */
+  score?: number
 }

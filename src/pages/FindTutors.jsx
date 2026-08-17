@@ -210,9 +210,9 @@ export function FindTutors() {
         message,
         status: 'pending',
         createdAt: new Date().toISOString(),
+        score: match.score,
       })
       setSentIds((prev) => new Set(prev).add(match.tutorId + '--' + match.moduleId))
-      setOpenId(null)
     } catch (err) {
       setActionError(err.message || 'Could not send that request.')
     } finally {

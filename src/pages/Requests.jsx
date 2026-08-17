@@ -1,19 +1,30 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Banner } from '../components/Spinner.jsx'
 import { AppLoader } from '../components/AppLoader.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { Avatar } from '../components/Avatar.jsx'
-import { arrangeSession, getSessionsByMatchIds, listMatchRequests, listUsers, respondToMatchRequest } from '../lib/firestore.js'
+import { arrangeSession, getLearningRequest, getSessionsByMatchIds, listMatchRequests, listUsers, respondToMatchRequest } from '../lib/firestore.js'
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function scoreBand(score) {
+  return score >= 80 ? 'excellent' : score >= 60 ? 'good' : score >= 40 ? 'possible' : 'low'
+}
+
+function formatRequestedAt(iso) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
 
 export function Requests() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [rows, setRows] = useState([])
   const [busyId, setBusyId] = useState(null)
+  const [arrangingId, setArrangingId] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -26,11 +37,18 @@ export function Requests() {
         ...result.outgoing.map((r) => ({ r, role: 'student' })),
       ]
       const matchIds = combined.map(({ r }) => r.matchId)
-      const sessions = matchIds.length ? await getSessionsByMatchIds(matchIds) : []
+      const [sessions, learningRequests] = await Promise.all([
+        matchIds.length ? getSessionsByMatchIds(matchIds) : [],
+        Promise.all(combined.map(({ r }) => getLearningRequest(r.matchId.split('--')[0]))),
+      ])
       const sessionByMatch = Object.fromEntries(sessions.map((s) => [s.matchId, s]))
-      const withMeta = combined
-        .map(({ r, role }) => ({ r, role, session: sessionByMatch[r.matchId], other: usersById[role === 'tutor' ? r.studentId : r.tutorId] }))
-        .filter(({ r, session }) => r.status !== 'accepted' || !session)
+      const withMeta = combined.map(({ r, role }, i) => ({
+        r,
+        role,
+        session: sessionByMatch[r.matchId],
+        other: usersById[role === 'tutor' ? r.studentId : r.tutorId],
+        topics: learningRequests[i]?.topics || [],
+      }))
       setRows(withMeta)
     } catch (err) {
       setError(err.message || 'Could not load your requests.')
@@ -56,12 +74,12 @@ export function Requests() {
     }
   }
 
-  async function arrange(matchId) {
+  async function arrange(matchId, details) {
     setBusyId(matchId)
     try {
-      await arrangeSession(matchId, {})
+      await arrangeSession(matchId, details)
+      setArrangingId(null)
       await load()
-      navigate('/sessions')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -70,7 +88,8 @@ export function Requests() {
   }
 
   const pending = rows.filter(({ r }) => r.status === 'pending')
-  const accepted = rows.filter(({ r }) => r.status === 'accepted')
+  const accepted = rows.filter(({ r, session }) => r.status === 'accepted' && (!session || session.status === 'arranged' || session.status === 'cancelled'))
+  const completed = rows.filter(({ r, session }) => r.status === 'accepted' && session?.status === 'completed')
   const declined = rows.filter(({ r }) => r.status === 'rejected')
 
   return (
@@ -79,7 +98,7 @@ export function Requests() {
         <div>
           <p className="eyebrow">REQUESTS</p>
           <h1>Tutoring requests</h1>
-          <p className="sub">Respond to requests, and arrange sessions once they're accepted.</p>
+          <p className="sub">Respond to requests, arrange sessions once accepted, and track how each one turned out.</p>
         </div>
       </div>
 
@@ -96,28 +115,74 @@ export function Requests() {
         </div>
       ) : (
         <div className="req-groups">
-          <Group title="Awaiting your response" icon="inbox" rows={pending}>
-            {({ r, other, role }) => role === 'tutor' && (
+          <Group title="Pending" icon="inbox" rows={pending}>
+            {({ r, role }) => (
               <div className="request-actions">
-                <button disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'accepted')}>Accept</button>
-                <button className="outline" disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'rejected')}>Decline</button>
+                {role === 'tutor' ? (
+                  <>
+                    <button disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'accepted')}>Accept</button>
+                    <button className="outline" disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'rejected')}>Decline</button>
+                  </>
+                ) : (
+                  <span className="status-badge pending">Awaiting response</span>
+                )}
               </div>
             )}
           </Group>
-          <Group title="Accepted — needs a session" icon="check" rows={accepted}>
-            {({ r }) => (
-              <div className="request-actions">
-                <button disabled={busyId === r.matchId} onClick={() => arrange(r.matchId)}>Arrange session</button>
-              </div>
-            )}
+
+          <Group
+            title="Accepted"
+            icon="check"
+            rows={accepted}
+            renderBelow={({ r, session }) =>
+              (session?.status === 'cancelled' || arrangingId === r.matchId) && (
+                <ArrangeForm
+                  matchId={r.matchId}
+                  busy={busyId === r.matchId}
+                  onArrange={arrange}
+                  onCancel={session?.status === 'cancelled' ? undefined : () => setArrangingId(null)}
+                  relabel={session?.status === 'cancelled' ? 'Re-arrange session' : undefined}
+                />
+              )
+            }
+          >
+            {({ r, session }) => {
+              if (session?.status === 'arranged') {
+                return (
+                  <div className="request-actions">
+                    <Link className="view-tutors" to="/sessions">
+                      Arranged for {session.day} {session.startTime}–{session.endTime} <Icon name="chevron" size={14} />
+                    </Link>
+                  </div>
+                )
+              }
+              if (session?.status === 'cancelled') return <span className="status-badge cancelled">Session cancelled</span>
+              if (arrangingId === r.matchId) {
+                return (
+                  <button className="outline" disabled={busyId === r.matchId} onClick={() => setArrangingId(null)}>Close</button>
+                )
+              }
+              return (
+                <div className="request-actions">
+                  <button disabled={busyId === r.matchId} onClick={() => setArrangingId(r.matchId)}>Arrange session</button>
+                </div>
+              )
+            }}
           </Group>
-          <Group title="Declined" icon="x" rows={declined} collapsedByDefault />
+
+          <Group title="Completed" icon="star" rows={completed} collapsedByDefault>
+            {() => <span className="status-badge completed">Completed</span>}
+          </Group>
+
+          <Group title="Declined" icon="x" rows={declined} collapsedByDefault>
+            {() => <span className="status-badge declined">Declined</span>}
+          </Group>
         </div>
       )}
     </>
   )
 
-  function Group({ title, icon, rows, children, collapsedByDefault }) {
+  function Group({ title, icon, rows, children, renderBelow, collapsedByDefault }) {
     const [open, setOpen] = useState(!collapsedByDefault)
     if (!rows.length) return null
     return (
@@ -127,18 +192,36 @@ export function Requests() {
           <span className="count">{rows.length}</span>
         </div>
         {open ? (
-          rows.map(({ r, role, other }) => (
+          rows.map(({ r, role, other, session, topics }) => (
             <div className="request-card" key={r.matchId}>
               <div className="request-mini">
                 <div className="request-who">
                   <Avatar name={other?.name || other?.email} id={other?.userId} small />
                   <div>
                     <b>{r.moduleName}</b>
-                    <small>{role === 'tutor' ? 'From' : 'To'} {other?.name || other?.email || 'a NYPkaki student'}</small>
+                    <small>{role === 'tutor' ? 'From' : 'To'} {other?.name || other?.email || 'a NYPkaki student'} · Requested {formatRequestedAt(r.createdAt)}</small>
                   </div>
                 </div>
-                {children({ r, other, role })}
+                <div className="request-meta">
+                  {r.score != null && (
+                    <span className={'score-pill sm ' + scoreBand(r.score)}>
+                      <b>{r.score}%</b>
+                    </span>
+                  )}
+                  {children({ r, other, role, session })}
+                </div>
               </div>
+              {topics.length > 0 && (
+                <div className="chips request-topics">
+                  {topics.map((t) => <span key={t}>{t}</span>)}
+                </div>
+              )}
+              {session?.status === 'cancelled' && (
+                <p className="recommend-copy cancelled-note">
+                  <Icon name="x" size={12} /> The arranged session was cancelled — {session.day} {session.startTime}–{session.endTime}.
+                </p>
+              )}
+              {renderBelow && renderBelow({ r, other, role, session })}
             </div>
           ))
         ) : (
@@ -149,4 +232,57 @@ export function Requests() {
       </div>
     )
   }
+}
+
+function ArrangeForm({ matchId, busy, onArrange, onCancel, relabel }) {
+  const [day, setDay] = useState('Mon')
+  const [startTime, setStartTime] = useState('14:00')
+  const [endTime, setEndTime] = useState('15:00')
+  const [format, setFormat] = useState('in-person')
+  const [location, setLocation] = useState('')
+
+  return (
+    <div className="arrange-form">
+      <div className="arrange-grid">
+        <label className="field">
+          Day
+          <select value={day} onChange={(e) => setDay(e.target.value)}>
+            {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          Start
+          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        </label>
+        <label className="field">
+          End
+          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+        </label>
+        <label className="field">
+          Format
+          <select value={format} onChange={(e) => setFormat(e.target.value)}>
+            <option value="in-person">In-person</option>
+            <option value="online">Online</option>
+          </select>
+        </label>
+        <label className="field arrange-location">
+          {format === 'online' ? 'Meeting link' : 'Location'}
+          <input
+            placeholder={format === 'online' ? 'e.g. Zoom link' : 'e.g. Campus library'}
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          />
+        </label>
+      </div>
+      <div className="arrange-actions">
+        {onCancel && <button className="outline" disabled={busy} onClick={onCancel}>Cancel</button>}
+        <button
+          disabled={busy || endTime <= startTime}
+          onClick={() => onArrange(matchId, { day, startTime, endTime, format, location: location || (format === 'online' ? 'Online' : 'Campus library') })}
+        >
+          {relabel || 'Confirm session'}
+        </button>
+      </div>
+    </div>
+  )
 }

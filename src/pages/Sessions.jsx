@@ -3,8 +3,10 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { Banner } from '../components/Spinner.jsx'
 import { AppLoader } from '../components/AppLoader.jsx'
 import { Icon } from '../components/Icon.jsx'
+import { Avatar } from '../components/Avatar.jsx'
 import { generateSessionPlan } from '../lib/ai.js'
 import {
+  cancelSession,
   completeSession,
   getLearningRequest,
   getSessionsByMatchIds,
@@ -15,6 +17,10 @@ import {
   submitFeedback,
 } from '../lib/firestore.js'
 
+function scoreBand(score) {
+  return score >= 80 ? 'excellent' : score >= 60 ? 'good' : score >= 40 ? 'possible' : 'low'
+}
+
 export function Sessions() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -22,6 +28,7 @@ export function Sessions() {
   const [rows, setRows] = useState([])
   const [feedback, setFeedback] = useState([])
   const [busyId, setBusyId] = useState(null)
+  const [detailRow, setDetailRow] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -34,18 +41,22 @@ export function Sessions() {
         ...result.outgoing.map((r) => ({ r, role: 'student' })),
       ]
       const matchIds = combined.map(({ r }) => r.matchId)
-      const [sessions, allFeedback] = await Promise.all([
+      const [sessions, allFeedback, learningRequests] = await Promise.all([
         matchIds.length ? getSessionsByMatchIds(matchIds) : [],
         listAllFeedback(),
+        Promise.all(combined.map(({ r }) => getLearningRequest(r.matchId.split('--')[0]))),
       ])
       const sessionByMatch = Object.fromEntries(sessions.map((s) => [s.matchId, s]))
       const withSessions = combined
-        .map(({ r, role }) => ({ r, role, session: sessionByMatch[r.matchId], other: usersById[role === 'tutor' ? r.studentId : r.tutorId] }))
-        .filter(({ session }) => session && session.status !== 'cancelled')
-        .sort((a, b) => {
-          if (a.session.status !== b.session.status) return a.session.status === 'arranged' ? -1 : 1
-          return (a.session.day + a.session.startTime).localeCompare(b.session.day + b.session.startTime)
-        })
+        .map(({ r, role }, i) => ({
+          r,
+          role,
+          session: sessionByMatch[r.matchId],
+          other: usersById[role === 'tutor' ? r.studentId : r.tutorId],
+          topics: learningRequests[i]?.topics || [],
+        }))
+        .filter(({ session }) => session)
+        .sort((a, b) => (a.session.day + a.session.startTime).localeCompare(b.session.day + b.session.startTime))
       setRows(withSessions)
       setFeedback(allFeedback.filter((f) => matchIds.includes(f.sessionId)))
     } catch (err) {
@@ -64,6 +75,18 @@ export function Sessions() {
     setBusyId(matchId)
     try {
       await completeSession(matchId)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function cancel(matchId) {
+    setBusyId(matchId)
+    try {
+      await cancelSession(matchId)
       await load()
     } catch (err) {
       setError(err.message)
@@ -107,6 +130,7 @@ export function Sessions() {
   const feedbackFrom = (matchId, fromUser) => feedback.find((f) => f.sessionId === matchId && f.fromUser === fromUser)
   const upcoming = rows.filter((row) => row.session.status === 'arranged')
   const completed = rows.filter((row) => row.session.status === 'completed')
+  const cancelled = rows.filter((row) => row.session.status === 'cancelled')
 
   return (
     <>
@@ -114,7 +138,7 @@ export function Sessions() {
         <div>
           <p className="eyebrow">SESSIONS</p>
           <h1>Your tutoring sessions</h1>
-          <p className="sub">Everything arranged and completed, with plans and feedback in one place.</p>
+          <p className="sub">Upcoming, completed and cancelled — with plans and feedback in one place.</p>
         </div>
       </div>
 
@@ -135,7 +159,9 @@ export function Sessions() {
             rows={upcoming}
             busyId={busyId}
             onComplete={complete}
+            onCancel={cancel}
             onSavePlan={savePlan}
+            onView={setDetailRow}
           />
           <SessionGroup
             title="Completed"
@@ -145,15 +171,28 @@ export function Sessions() {
             onFeedback={leaveFeedback}
             feedbackFrom={feedbackFrom}
             myId={user.userId}
+            onView={setDetailRow}
             completedGroup
+          />
+          <SessionGroup
+            title="Cancelled"
+            icon="x"
+            rows={cancelled}
+            busyId={busyId}
+            onView={setDetailRow}
+            collapsedByDefault
+            cancelledGroup
           />
         </div>
       )}
+
+      {detailRow && <SessionDetailModal {...detailRow} onClose={() => setDetailRow(null)} />}
     </>
   )
 }
 
-function SessionGroup({ title, icon, rows, busyId, onComplete, onSavePlan, onFeedback, feedbackFrom, myId, completedGroup }) {
+function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSavePlan, onFeedback, feedbackFrom, myId, onView, completedGroup, cancelledGroup, collapsedByDefault }) {
+  const [open, setOpen] = useState(!collapsedByDefault)
   if (!rows.length) return null
   return (
     <div className="requests">
@@ -161,34 +200,108 @@ function SessionGroup({ title, icon, rows, busyId, onComplete, onSavePlan, onFee
         <h2><Icon name={icon} size={16} /> {title}</h2>
         <span className="count">{rows.length}</span>
       </div>
-      {rows.map(({ r, session, role, other }) => (
-        <div className="request-card" key={r.matchId}>
-          <div className="request-mini">
-            <div>
-              <b>{r.moduleName}</b>
-              <small>
-                With {other?.name || other?.email || 'a NYPkaki student'} · {session.day} {session.startTime}–{session.endTime} · {session.location}
-              </small>
-            </div>
-            {!completedGroup && (
-              <div className="request-actions">
-                <button className="outline" disabled={busyId === r.matchId} onClick={() => onComplete(r.matchId)}>
-                  Mark as completed
-                </button>
+      {!open ? (
+        <button className="view-tutors" onClick={() => setOpen(true)}>
+          Show {rows.length} <Icon name="chevron" size={14} />
+        </button>
+      ) : (
+        rows.map((row) => {
+          const { r, session, role, other, topics } = row
+          return (
+            <div className="request-card" key={r.matchId}>
+              <div className="request-mini">
+                <div className="request-who">
+                  <Avatar name={other?.name || other?.email} id={other?.userId} small />
+                  <div>
+                    <b>{r.moduleName}</b>
+                    <small>
+                      With {other?.name || other?.email || 'a NYPkaki student'} · {session.day} {session.startTime}–{session.endTime} ·{' '}
+                      {session.format === 'online' ? 'Online' : 'In-person'} · {session.location}
+                    </small>
+                  </div>
+                </div>
+                <div className="request-actions">
+                  <button className="outline" onClick={() => onView(row)}>View Session</button>
+                  {!completedGroup && !cancelledGroup && (
+                    <>
+                      <button className="outline danger-btn" disabled={busyId === r.matchId} onClick={() => onCancel(r.matchId)}>Cancel</button>
+                      <button disabled={busyId === r.matchId} onClick={() => onComplete(r.matchId)}>Mark Completed</button>
+                    </>
+                  )}
+                </div>
               </div>
-            )}
+
+              {topics.length > 0 && (
+                <div className="chips request-topics">
+                  {topics.map((t) => <span key={t}>{t}</span>)}
+                </div>
+              )}
+
+              {!completedGroup && !cancelledGroup && (
+                <SessionPlanPanel matchId={r.matchId} r={r} session={session} role={role} busy={busyId === r.matchId} onSave={onSavePlan} />
+              )}
+              {completedGroup && session.plan && <PlanReadOnly plan={session.plan} />}
+
+              {completedGroup && (
+                <FeedbackSection matchId={r.matchId} otherId={role === 'tutor' ? r.studentId : r.tutorId} other={other} busy={busyId === r.matchId} onSubmit={onFeedback} feedbackFrom={feedbackFrom} myId={myId} />
+              )}
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
+function SessionDetailModal({ r, session, role, other, topics, onClose }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}><Icon name="x" size={16} /></button>
+        <div className="modal-head">
+          <Avatar name={other?.name || other?.email} id={other?.userId} />
+          <div>
+            <h2>{other?.name || 'A NYPkaki student'}</h2>
+            <p className="course">{role === 'tutor' ? 'Your student' : 'Your tutor'}</p>
           </div>
+        </div>
 
-          {!completedGroup && (
-            <SessionPlanPanel matchId={r.matchId} r={r} session={session} role={role} busy={busyId === r.matchId} onSave={onSavePlan} />
-          )}
-          {completedGroup && session.plan && <PlanReadOnly plan={session.plan} />}
-
-          {completedGroup && (
-            <FeedbackSection matchId={r.matchId} otherId={role === 'tutor' ? r.studentId : r.tutorId} other={other} busy={busyId === r.matchId} onSubmit={onFeedback} feedbackFrom={feedbackFrom} myId={myId} />
+        <div className="tutor-stats-row modal-stats">
+          <span className={'status-badge ' + session.status}>{session.status}</span>
+          {r.score != null && (
+            <span className={'score-pill sm ' + scoreBand(r.score)}><b>{r.score}% match</b></span>
           )}
         </div>
-      ))}
+
+        <div className="modal-section">
+          <h3>{r.moduleName}</h3>
+          {topics.length > 0 && (
+            <div className="chips">{topics.map((t) => <span key={t}>{t}</span>)}</div>
+          )}
+        </div>
+
+        <div className="modal-section">
+          <h3>Session details</h3>
+          <div className="detail-grid">
+            <div><span className="tutor-topics-label">Day</span><b>{session.day}</b></div>
+            <div><span className="tutor-topics-label">Time</span><b>{session.startTime}–{session.endTime}</b></div>
+            <div><span className="tutor-topics-label">Format</span><b>{session.format === 'online' ? 'Online' : 'In-person'}</b></div>
+            <div><span className="tutor-topics-label">{session.format === 'online' ? 'Link' : 'Location'}</span><b>{session.location}</b></div>
+          </div>
+        </div>
+
+        {session.plan && (
+          <div className="modal-section">
+            <h3>Session plan</h3>
+            <p className="plan-goal">{session.plan.goal}</p>
+            <ol className="plan-blocks">
+              {session.plan.blocks.map((b, i) => (
+                <li key={i}><b>{b.label}</b><span>{b.description}</span></li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
