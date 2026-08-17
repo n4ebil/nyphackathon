@@ -5,9 +5,20 @@ import { Avatar } from './Avatar.jsx'
 import { NotificationBell } from './NotificationBell.jsx'
 
 const NAV = [
-  ['/dashboard', 'Dashboard', 'home'],
-  ['/requests', 'My sessions', 'calendar'],
+  ['/dashboard', 'Home', 'home'],
+  ['/find-tutors', 'Find Tutors', 'search'],
+  ['/requests', 'Requests', 'inbox'],
+  ['/sessions', 'Sessions', 'calendar'],
   ['/schedule', 'Schedule', 'book'],
+  ['/messages', 'Messages', 'message'],
+]
+
+const MOBILE_NAV = [
+  ['/dashboard', 'Home', 'home'],
+  ['/find-tutors', 'Find', 'search'],
+  ['/requests', 'Requests', 'inbox'],
+  ['/sessions', 'Sessions', 'calendar'],
+  ['/profile', 'Profile', 'user'],
 ]
 
 export function Layout() {
@@ -32,6 +43,10 @@ export function Layout() {
               {label}
             </NavLink>
           ))}
+          <NavLink to="/notifications" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <Icon name="bell" />
+            Notifications
+          </NavLink>
         </nav>
         <div className="side-bottom">
           <button className="tutor-mode" onClick={() => navigate('/profile#teaching')}>
@@ -71,6 +86,14 @@ export function Layout() {
           <Outlet />
         </section>
       </main>
+      <nav className="mobile-tabbar">
+        {MOBILE_NAV.map(([to, label, icon]) => (
+          <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
+            <Icon name={icon} size={19} />
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }

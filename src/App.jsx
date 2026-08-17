@@ -5,7 +5,11 @@ import { AppLoader } from './components/AppLoader.jsx'
 import { Login } from './pages/Login.jsx'
 import { Register } from './pages/Register.jsx'
 import { Dashboard } from './pages/Dashboard.jsx'
+import { FindTutors } from './pages/FindTutors.jsx'
 import { Requests } from './pages/Requests.jsx'
+import { Sessions } from './pages/Sessions.jsx'
+import { Messages } from './pages/Messages.jsx'
+import { Notifications } from './pages/Notifications.jsx'
 import { Profile } from './pages/Profile.jsx'
 import { Schedule } from './pages/Schedule.jsx'
 import { Directory } from './pages/Directory.jsx'
@@ -20,7 +24,11 @@ export default function App() {
         <Route element={<RequireAuth />}>
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/find-tutors" element={<FindTutors />} />
             <Route path="/requests" element={<Requests />} />
+            <Route path="/sessions" element={<Sessions />} />
+            <Route path="/messages" element={<Messages />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/profile" element={<Profile />} />
             <Route element={<RequireAdmin />}>

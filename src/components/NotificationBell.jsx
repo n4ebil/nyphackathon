@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Icon } from './Icon.jsx'
 import { Spinner } from './Spinner.jsx'
-import { listAllClassInterests, listAllLearningRequests, listAllTeachingSubjects, listClassRequests, listMatchRequests } from '../lib/firestore.js'
-import { computeNotifications, getSeenIds, markAllSeen } from '../lib/notifications.js'
+import { useNotifications } from '../lib/useNotifications.js'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -21,36 +20,8 @@ export function NotificationBell() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState([])
-  const [unseenCount, setUnseenCount] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const { items, unseenCount, loading, reload, markSeen } = useNotifications(user.userId)
   const wrapRef = useRef(null)
-
-  async function load() {
-    setLoading(true)
-    try {
-      const [matchRequests, classRequests, classInterests, teachingSubjects, learningRequests] = await Promise.all([
-        listMatchRequests(user.userId),
-        listClassRequests(),
-        listAllClassInterests(),
-        listAllTeachingSubjects(),
-        listAllLearningRequests(),
-      ])
-      const computed = computeNotifications({ userId: user.userId, matchRequests, classRequests, classInterests, teachingSubjects, learningRequests })
-      const seen = getSeenIds(user.userId)
-      setItems(computed)
-      setUnseenCount(computed.filter((n) => !seen.has(n.id)).length)
-    } catch (err) {
-      console.error('Could not load notifications.', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.userId])
 
   useEffect(() => {
     function onClickAway(e) {
@@ -63,12 +34,8 @@ export function NotificationBell() {
   function toggleOpen() {
     const next = !open
     setOpen(next)
-    if (next) {
-      markAllSeen(user.userId, items.map((n) => n.id))
-      setUnseenCount(0)
-    } else {
-      load()
-    }
+    if (next) markSeen()
+    else reload()
   }
 
   function goTo(item) {
@@ -98,7 +65,7 @@ export function NotificationBell() {
             </div>
           ) : (
             <div className="notify-list">
-              {items.map((item) => (
+              {items.slice(0, 6).map((item) => (
                 <button key={item.id} className="notify-item" onClick={() => goTo(item)}>
                   <span className="notify-item-icon">
                     <Icon name={item.icon} size={15} />
@@ -111,6 +78,9 @@ export function NotificationBell() {
               ))}
             </div>
           )}
+          <button className="notify-panel-foot" onClick={() => { setOpen(false); navigate('/notifications') }}>
+            View all notifications
+          </button>
         </div>
       )}
     </div>
