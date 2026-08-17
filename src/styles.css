@@ -758,6 +758,37 @@ form input:disabled, form select:disabled, form textarea:disabled { background: 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
 
+/* ---------------------------------------------------------------- why this match modal */
+.why-modal { width: min(460px, 100%); }
+.why-score { display: flex; align-items: center; gap: 16px; padding-right: 30px; }
+.why-score .eyebrow { margin-bottom: 4px; }
+.why-score h2 { font-family: 'Instrument Sans', sans-serif; font-size: 19px; margin: 0; }
+.score-pill.xl { padding: 12px 18px; flex-shrink: 0; }
+.score-pill.xl b { font-size: 24px; }
+.score-pill.xl span { font-size: 10px; }
+
+.why-checklist { list-style: none; margin: 22px 0 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.why-checklist li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.why-checklist li.neutral { color: var(--muted); }
+.why-icon {
+  width: 21px; height: 21px; min-width: 21px; border-radius: 50%; display: grid; place-items: center;
+  margin-top: 1px; font-size: 12px; font-weight: 800;
+}
+.why-checklist li.ok .why-icon { background: var(--green-light); color: var(--green); }
+.why-checklist li.bad .why-icon { background: var(--red-light); color: var(--red); }
+.why-checklist li.neutral .why-icon { background: #f1effb; color: var(--muted-soft); }
+
+.best-time {
+  margin-top: 22px; padding: 16px 18px; border-radius: var(--r-md); background: var(--lav);
+}
+.best-time-value { margin: 4px 0 0; font-family: 'Instrument Sans', sans-serif; font-size: 16px; font-weight: 700; color: var(--blue-dark); }
+.best-time .recommend-copy { margin-top: 4px; }
+
+.why-actions { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); }
+.why-actions .field { margin-top: 0; }
+.why-actions .sent-tag { justify-content: center; margin: 0; padding: 12px; background: var(--green-light); border-radius: 14px; }
+.why-btn { display: flex; align-items: center; gap: 6px; }
+
 /* ---------------------------------------------------------------- mobile tab bar */
 .mobile-tabbar { display: none; }
 
@@ -819,4 +850,5 @@ form input:disabled, form select:disabled, form textarea:disabled { background: 
   .filter-row { grid-template-columns: 1fr; }
   .modal-panel { padding: 24px 20px; border-radius: var(--r-md); }
   .modal-subject-head { flex-wrap: wrap; }
+  .why-score { flex-wrap: wrap; }
 }

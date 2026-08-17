@@ -22,6 +22,7 @@ import { submitLearningRequest } from '../lib/match.js'
 
 const BAND_LABELS = { excellent: 'Great fit', good: 'Good fit', possible: 'Possible fit', low: 'Not quite' }
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DAY_FULL = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' }
 const TIME_BUCKETS = [
   ['any', 'Any time'],
   ['morning', 'Morning (before 12pm)'],
@@ -49,11 +50,11 @@ export function FindTutors() {
   const [loadError, setLoadError] = useState('')
   const [data, setData] = useState(null)
   const [filters, setFilters] = useState({ search: '', moduleId: '', topics: new Set(), day: 'any', time: 'any', format: 'any' })
-  const [openId, setOpenId] = useState(null)
   const [sentIds, setSentIds] = useState(new Set())
   const [actionError, setActionError] = useState('')
   const [busyId, setBusyId] = useState(null)
   const [profileTutor, setProfileTutor] = useState(null)
+  const [whyMatchTutor, setWhyMatchTutor] = useState(null)
   const [waitlisted, setWaitlisted] = useState(false)
 
   useEffect(() => {
@@ -365,12 +366,11 @@ export function FindTutors() {
                       match={m}
                       topics={tutorTopics(data, m) || []}
                       slots={data.availability.filter((a) => a.userId === m.tutorId)}
-                      open={openId === m.matchId}
                       sent={sentIds.has(m.tutorId + '--' + m.moduleId)}
                       busy={busyId === m.matchId}
-                      onToggle={() => setOpenId(openId === m.matchId ? null : m.matchId)}
                       onSend={(message) => requestSession(m, message)}
                       onViewProfile={() => setProfileTutor(m)}
+                      onWhyMatch={() => setWhyMatchTutor(m)}
                     />
                   ))}
                 </div>
@@ -388,7 +388,159 @@ export function FindTutors() {
           onClose={() => setProfileTutor(null)}
         />
       )}
+
+      {whyMatchTutor && request && (
+        <WhyMatchModal
+          match={whyMatchTutor}
+          request={request}
+          sent={sentIds.has(whyMatchTutor.tutorId + '--' + whyMatchTutor.moduleId)}
+          busy={busyId === whyMatchTutor.matchId}
+          onSend={(message) => requestSession(whyMatchTutor, message)}
+          onClose={() => setWhyMatchTutor(null)}
+        />
+      )}
     </>
+  )
+}
+
+/** "14:30" -> "2:30 PM" */
+function to12h(time) {
+  const [h, m] = time.split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`
+}
+
+function slotMinutes(slot) {
+  const [sh, sm] = slot.startTime.split(':').map(Number)
+  const [eh, em] = slot.endTime.split(':').map(Number)
+  return eh * 60 + em - (sh * 60 + sm)
+}
+
+/** Longest shared slot wins — the most flexible real overlap, not just the first one found. */
+function bestSharedSlot(sharedSlots) {
+  if (!sharedSlots.length) return null
+  return [...sharedSlots].sort((a, b) => slotMinutes(b) - slotMinutes(a))[0]
+}
+
+/**
+ * Turns the deterministic score breakdown into a plain-language checklist —
+ * every line traces back to a real breakdown factor, sharedSlots, or
+ * tutorStats value. Nothing here is invented.
+ */
+function buildChecklist(match, request) {
+  const factor = (label) => match.breakdown.find((f) => f.label === label)
+  const items = []
+
+  const module = factor('Module compatibility')
+  if (module.earned === module.max) items.push({ ok: true, text: `Same module: ${request.moduleName}` })
+  else if (module.earned > 0) items.push({ ok: true, text: `Related module: ${match.moduleName}` })
+  else items.push({ ok: false, text: `Different module — ${match.moduleName} isn't a close match for ${request.moduleName}` })
+
+  if (match.coveredTopics.length) {
+    const complete = match.coveredTopics.length === request.topics.length
+    items.push({
+      ok: true,
+      text: complete
+        ? `Same topic${match.coveredTopics.length === 1 ? '' : 's'}: ${match.coveredTopics.join(', ')}`
+        : `Covers ${match.coveredTopics.length}/${request.topics.length} topics: ${match.coveredTopics.join(', ')}`,
+    })
+  } else if (request.topics.length) {
+    items.push({ ok: false, text: `Doesn't cover the topics you asked about yet` })
+  } else {
+    items.push({ ok: null, text: `No specific topics requested` })
+  }
+
+  if (match.sharedSlots.length) {
+    items.push({ ok: true, text: `${match.sharedSlots.length} overlapping availability slot${match.sharedSlots.length === 1 ? '' : 's'}` })
+  } else {
+    items.push({ ok: false, text: `No overlapping availability yet` })
+  }
+
+  const format = factor('Learning format')
+  const fmtLabel = request.preferredFormat === 'either' ? 'flexible' : request.preferredFormat
+  if (format.earned === format.max) items.push({ ok: true, text: `Both prefer ${fmtLabel} sessions` })
+  else if (format.earned > 0) items.push({ ok: true, text: `Flexible on format — ${match.tutor.preferredFormat === 'either' ? 'they are' : 'you are'} happy either way` })
+  else items.push({ ok: false, text: `Different format preferences — you want ${request.preferredFormat}, they prefer ${match.tutor.preferredFormat}` })
+
+  const exp = factor('Tutor experience')
+  items.push({ ok: exp.earned > 0 ? true : null, text: exp.detail })
+
+  const stats = match.tutorStats
+  if (stats && !stats.isNew && stats.sessionsCompleted > 0) {
+    items.push({
+      ok: true,
+      text: `Tutor has completed ${stats.sessionsCompleted} session${stats.sessionsCompleted === 1 ? '' : 's'}${stats.avgRating != null ? ` · rated ${stats.avgRating}/5` : ''}`,
+    })
+  } else {
+    items.push({ ok: null, text: 'New tutor — no completed sessions yet' })
+  }
+
+  return items
+}
+
+function WhyMatchModal({ match, request, sent, busy, onSend, onClose }) {
+  const [message, setMessage] = useState(`Hi! I need help understanding ${match.moduleName}.`)
+  const band = match.score >= 80 ? 'excellent' : match.score >= 60 ? 'good' : match.score >= 40 ? 'possible' : 'low'
+  const checklist = useMemo(() => buildChecklist(match, request), [match, request])
+  const best = bestSharedSlot(match.sharedSlots)
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel why-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}><Icon name="x" size={16} /></button>
+
+        <div className="why-score">
+          <div className={'score-pill xl ' + band}>
+            <b>{match.score}%</b>
+            <span>{BAND_LABELS[band]}</span>
+          </div>
+          <div>
+            <p className="eyebrow">WHY THIS MATCH</p>
+            <h2>{match.tutor.name || 'A NYPkaki student'}</h2>
+            <p className="recommend-copy">for {request.moduleName}</p>
+          </div>
+        </div>
+
+        <ul className="why-checklist">
+          {checklist.map((item, i) => (
+            <li key={i} className={item.ok === true ? 'ok' : item.ok === false ? 'bad' : 'neutral'}>
+              <span className="why-icon">
+                {item.ok === true ? <Icon name="check" size={13} /> : item.ok === false ? <Icon name="x" size={12} /> : '–'}
+              </span>
+              {item.text}
+            </li>
+          ))}
+        </ul>
+
+        <div className="best-time">
+          <span className="tutor-topics-label"><Icon name="clock" size={12} /> Best available time</span>
+          {best ? (
+            <p className="best-time-value">{DAY_FULL[best.day] || best.day}, {to12h(best.startTime)} – {to12h(best.endTime)}</p>
+          ) : (
+            <p className="recommend-copy">No overlapping availability yet — reach out to arrange a time directly.</p>
+          )}
+        </div>
+
+        <div className="why-actions">
+          {sent ? (
+            <span className="sent-tag">
+              <Icon name="check" size={14} /> Request sent
+            </span>
+          ) : (
+            <>
+              <label className="field">
+                Message
+                <textarea value={message} onChange={(e) => setMessage(e.target.value)} />
+              </label>
+              <button className="primary wide" disabled={busy} onClick={() => onSend(message)}>
+                {busy ? <Spinner /> : <>Request Session <Icon name="arrow" size={16} /></>}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -397,7 +549,7 @@ function formatSlots(slots, max = 3) {
   return { shown: sorted.slice(0, max), extra: Math.max(sorted.length - max, 0) }
 }
 
-function TutorCard({ match, topics, slots, open, sent, busy, onToggle, onSend, onViewProfile }) {
+function TutorCard({ match, topics, slots, sent, busy, onSend, onViewProfile, onWhyMatch }) {
   const [message, setMessage] = useState(`Hi! I need help understanding ${match.moduleName}.`)
   const band = match.score >= 80 ? 'excellent' : match.score >= 60 ? 'good' : match.score >= 40 ? 'possible' : 'low'
   const { shown, extra } = formatSlots(slots)
@@ -463,8 +615,8 @@ function TutorCard({ match, topics, slots, open, sent, busy, onToggle, onSend, o
       </div>
 
       <div className="match-card-actions">
-        <button className="view-tutors" onClick={onToggle}>
-          {open ? 'Hide breakdown' : 'Why this match?'} <Icon name="chevron" size={14} />
+        <button className="view-tutors why-btn" onClick={onWhyMatch}>
+          <Icon name="spark" size={14} /> Why this match?
         </button>
         <button className="outline profile-btn" onClick={onViewProfile}>View Profile</button>
         {sent ? (
@@ -477,29 +629,6 @@ function TutorCard({ match, topics, slots, open, sent, busy, onToggle, onSend, o
           </button>
         )}
       </div>
-
-      {open && (
-        <div className="breakdown">
-          {match.breakdown.map((f) => (
-            <div className="breakdown-row" key={f.label}>
-              <div className="breakdown-label">
-                <span>{f.label}</span>
-                <b>{f.earned}/{f.max}</b>
-              </div>
-              <div className="breakdown-bar">
-                <div className="breakdown-fill" style={{ width: `${(f.earned / f.max) * 100}%` }} />
-              </div>
-              <p>{f.detail}</p>
-            </div>
-          ))}
-          {!sent && (
-            <label className="field">
-              Message
-              <textarea value={message} onChange={(e) => setMessage(e.target.value)} />
-            </label>
-          )}
-        </div>
-      )}
     </article>
   )
 }
