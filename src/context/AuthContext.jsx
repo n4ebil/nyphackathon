@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -15,6 +15,15 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  // While true, the auth-state listener leaves the user profile alone — register()
+  // is the one writing it. Firebase can fire onAuthStateChanged for the same sign-up
+  // more than once (e.g. a token refresh right after account creation), and each firing
+  // does its own Firestore read; if that read lands before register()'s own write has
+  // committed, it comes back empty and — no matter how the merge logic is written — a
+  // *later* empty read can still stomp on the good data once more come in after it.
+  // Deferring entirely during registration removes the race instead of trying to make
+  // two independent writers commutative.
+  const registeringRef = useRef(false)
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -24,6 +33,10 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) {
         setUser(null)
+        setLoading(false)
+        return
+      }
+      if (registeringRef.current) {
         setLoading(false)
         return
       }
@@ -39,9 +52,7 @@ export function AuthProvider({ children }) {
         setLoading(false)
         return
       }
-      // A failed/empty fetch shouldn't erase profile fields `register()` already set
-      // locally (e.g. while this same listener fires from the sign-up itself).
-      setUser((prev) => ({ userId: fbUser.uid, email: fbUser.email, ...(prev?.userId === fbUser.uid ? prev : null), ...profile }))
+      setUser({ userId: fbUser.uid, email: fbUser.email, ...profile })
       setLoading(false)
     })
     return unsubscribe
@@ -66,22 +77,27 @@ export function AuthProvider({ children }) {
   }, [])
 
   const register = useCallback(async ({ email, password, ...profile }) => {
-    let credential
+    registeringRef.current = true
     try {
-      credential = await createUserWithEmailAndPassword(auth, email, password)
-      await updateAuthProfile(credential.user, { displayName: profile.name })
-    } catch (err) {
-      throw new Error(friendlyAuthError(err))
+      let credential
+      try {
+        credential = await createUserWithEmailAndPassword(auth, email, password)
+        await updateAuthProfile(credential.user, { displayName: profile.name })
+      } catch (err) {
+        throw new Error(friendlyAuthError(err))
+      }
+      // The Auth account exists past this point — don't fail the whole sign-up over a
+      // Firestore write hiccup (e.g. rules not deployed yet), or a retry would just hit
+      // "email already in use" with no way to finish setting up the profile.
+      try {
+        await upsertUserProfile(credential.user.uid, profile)
+      } catch (err) {
+        console.error('Profile save failed after sign-up; it can be completed from the Profile page.', err)
+      }
+      setUser({ userId: credential.user.uid, email, ...profile })
+    } finally {
+      registeringRef.current = false
     }
-    // The Auth account exists past this point — don't fail the whole sign-up over a
-    // Firestore write hiccup (e.g. rules not deployed yet), or a retry would just hit
-    // "email already in use" with no way to finish setting up the profile.
-    try {
-      await upsertUserProfile(credential.user.uid, profile)
-    } catch (err) {
-      console.error('Profile save failed after sign-up; it can be completed from the Profile page.', err)
-    }
-    setUser({ userId: credential.user.uid, email, ...profile })
   }, [])
 
   const logout = useCallback(() => signOut(auth), [])
