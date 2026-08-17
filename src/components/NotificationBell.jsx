@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Icon } from './Icon.jsx'
 import { Spinner } from './Spinner.jsx'
-import { listAllClassInterests, listAllTeachingSubjects, listClassRequests, listMatchRequests } from '../lib/firestore.js'
+import { listAllClassInterests, listAllLearningRequests, listAllTeachingSubjects, listClassRequests, listMatchRequests } from '../lib/firestore.js'
 import { computeNotifications, getSeenIds, markAllSeen } from '../lib/notifications.js'
 
 function timeAgo(iso) {
@@ -29,13 +29,14 @@ export function NotificationBell() {
   async function load() {
     setLoading(true)
     try {
-      const [matchRequests, classRequests, classInterests, teachingSubjects] = await Promise.all([
+      const [matchRequests, classRequests, classInterests, teachingSubjects, learningRequests] = await Promise.all([
         listMatchRequests(user.userId),
         listClassRequests(),
         listAllClassInterests(),
         listAllTeachingSubjects(),
+        listAllLearningRequests(),
       ])
-      const computed = computeNotifications({ userId: user.userId, matchRequests, classRequests, classInterests, teachingSubjects })
+      const computed = computeNotifications({ userId: user.userId, matchRequests, classRequests, classInterests, teachingSubjects, learningRequests })
       const seen = getSeenIds(user.userId)
       setItems(computed)
       setUnseenCount(computed.filter((n) => !seen.has(n.id)).length)

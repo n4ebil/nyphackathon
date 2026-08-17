@@ -1,13 +1,17 @@
 import { findMatches, buildExplanation } from '../shared/matching.ts'
 import { parseHelpRequest } from '../shared/nlp.ts'
 import { MODULES, modulesForCourse } from '../shared/nyp.ts'
+import { computeTutorStats } from '../shared/reliability.ts'
 import { pickModuleWithAI } from './ai.js'
 import {
   createClassRequest,
   createLearningRequest,
   getAvailability,
   listAllAvailability,
+  listAllFeedback,
   listAllLearningRequests,
+  listAllMatchRequests,
+  listAllSessions,
   listAllTeachingSubjects,
   listUsers,
 } from './firestore.js'
@@ -38,12 +42,13 @@ async function resolveModuleAndTopics(student, text) {
   }
 }
 
-/** Parses free text into a learning request and saves it to Firestore. */
-export async function submitLearningRequest(student, text) {
+/**
+ * Parses free text into the structured fields a learning request needs,
+ * without saving anything — lets the UI show an editable review step first.
+ */
+export async function previewLearningRequest(student, text) {
   const { moduleId, moduleName, topics, parsed, parsedBy } = await resolveModuleAndTopics(student, text)
-
-  const request = {
-    userId: student.userId,
+  return {
     moduleId,
     moduleName,
     topics,
@@ -51,8 +56,30 @@ export async function submitLearningRequest(student, text) {
     urgency: parsed.urgency,
     deadline: parsed.deadline || null,
     preferredFormat: parsed.preferredFormat || student.preferredFormat || 'either',
-    createdAt: new Date().toISOString(),
+    duration: parsed.duration || 60,
     parsedBy,
+  }
+}
+
+/**
+ * Saves a learning request. `fields` is normally the (possibly student-edited)
+ * output of `previewLearningRequest` — falls back to parsing `text` itself if
+ * the caller skips the review step.
+ */
+export async function submitLearningRequest(student, text, fields) {
+  const resolved = fields || (await previewLearningRequest(student, text))
+  const request = {
+    userId: student.userId,
+    moduleId: resolved.moduleId,
+    moduleName: resolved.moduleName,
+    topics: resolved.topics,
+    description: resolved.description ?? text,
+    urgency: resolved.urgency,
+    deadline: resolved.deadline || null,
+    preferredFormat: resolved.preferredFormat || student.preferredFormat || 'either',
+    duration: resolved.duration || 60,
+    createdAt: new Date().toISOString(),
+    parsedBy: resolved.parsedBy || 'local',
   }
   return createLearningRequest(request)
 }
@@ -77,13 +104,29 @@ export async function submitClassRequest(student, text) {
 
 /** Ranks every other user against one learning request, using the shared deterministic scoring model. */
 export async function computeMatches(student, request) {
-  const [candidates, teachingSubjects, availability, studentSlots, openRequests] = await Promise.all([
-    listUsers(),
-    listAllTeachingSubjects(),
-    listAllAvailability(),
-    getAvailability(student.userId),
-    listAllLearningRequests(),
-  ])
+  const [candidates, teachingSubjects, availability, studentSlots, openRequests, feedback, sessions, matchRequests] =
+    await Promise.all([
+      listUsers(),
+      listAllTeachingSubjects(),
+      listAllAvailability(),
+      getAvailability(student.userId),
+      listAllLearningRequests(),
+      listAllFeedback(),
+      listAllSessions(),
+      listAllMatchRequests(),
+    ])
+
+  const tutorStats = {}
+  for (const tutor of candidates) {
+    if (tutor.userId === student.userId) continue
+    tutorStats[tutor.userId] = computeTutorStats({
+      tutorId: tutor.userId,
+      feedback,
+      sessions,
+      matchRequests,
+      teachingSubjects,
+    })
+  }
 
   const matches = findMatches({
     student,
@@ -94,6 +137,7 @@ export async function computeMatches(student, request) {
     availability,
     studentTeaches: teachingSubjects.filter((s) => s.userId === student.userId),
     openRequests,
+    tutorStats,
   })
 
   return matches.map((match) => ({ ...match, explanation: buildExplanation(match, request) }))

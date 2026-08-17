@@ -41,6 +41,8 @@ export interface LearningRequest {
   /** ISO date, e.g. 2026-08-21. */
   deadline?: string
   preferredFormat: LearningFormat
+  /** Preferred session length in minutes, e.g. 60. Shown to the tutor; not scored (no comparable tutor-side preference exists yet). */
+  duration?: number
 }
 
 export interface AvailabilitySlot {
@@ -72,10 +74,24 @@ export interface Match {
   coveredTopics: string[]
   /** Set when the pair can also teach each other something. */
   reciprocal?: { moduleName: string }
+  /** Real computed track record for this tutor — see shared/reliability.ts. Undefined/isNew means no history yet. */
+  tutorStats?: TutorStats
   sharedSlots: AvailabilitySlot[]
   status: 'suggested' | 'pending' | 'accepted' | 'rejected'
   /** Populated by Bedrock in phase 6; a local template stands in for now. */
   explanation?: string
+}
+
+export interface SessionPlanBlock {
+  label: string
+  description: string
+}
+
+export interface SessionPlan {
+  goal: string
+  blocks: SessionPlanBlock[]
+  /** 'ai' if Gemini generated it, 'template' if the deterministic fallback did. */
+  generatedBy: 'ai' | 'template'
 }
 
 export interface Session {
@@ -87,6 +103,7 @@ export interface Session {
   format: LearningFormat
   location: string
   status: 'arranged' | 'completed' | 'cancelled'
+  plan?: SessionPlan
 }
 
 export interface Feedback {
@@ -94,7 +111,21 @@ export interface Feedback {
   fromUser: string
   toUser: string
   rating: number
+  helpful: boolean
   comment: string
+  createdAt: string
+}
+
+export interface TutorStats {
+  sessionsCompleted: number
+  studentsHelped: number
+  avgRating: number | null
+  ratingCount: number
+  helpfulRate: number | null
+  responseRate: number | null
+  topicsTaught: number
+  /** No completed sessions or feedback yet — scoring should stay neutral, UI should say "New tutor" rather than showing a bad-looking 0. */
+  isNew: boolean
 }
 
 export interface MatchRequest {

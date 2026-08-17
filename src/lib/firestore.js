@@ -119,6 +119,11 @@ export async function listAllLearningRequests() {
   return snap.docs.map((d) => ({ requestId: d.id, ...d.data() }))
 }
 
+export async function getLearningRequest(requestId) {
+  const snap = await getDoc(doc(db, 'learningRequests', requestId))
+  return snap.exists() ? { requestId: snap.id, ...snap.data() } : null
+}
+
 // ---------------------------------------------------------------- match requests
 
 /** matchId (from findMatches, `${requestId}--${tutorId}`) is used as the doc id so a match can only be requested once. */
@@ -141,6 +146,11 @@ export async function respondToMatchRequest(matchId, status) {
   await updateDoc(doc(db, 'matchRequests', matchId), { status })
 }
 
+export async function listAllMatchRequests() {
+  const snap = await getDocs(collection(db, 'matchRequests'))
+  return snap.docs.map((d) => d.data())
+}
+
 // ---------------------------------------------------------------- sessions
 
 export async function getSessionsByMatchIds(matchIds) {
@@ -161,6 +171,31 @@ export async function arrangeSession(matchId, details = {}) {
   await setDoc(doc(db, 'sessions', matchId), session)
   await respondToMatchRequest(matchId, 'accepted')
   return session
+}
+
+export async function listAllSessions() {
+  const snap = await getDocs(collection(db, 'sessions'))
+  return snap.docs.map((d) => d.data())
+}
+
+export async function completeSession(matchId) {
+  await updateDoc(doc(db, 'sessions', matchId), { status: 'completed' })
+}
+
+export async function saveSessionPlan(matchId, plan) {
+  await updateDoc(doc(db, 'sessions', matchId), { plan })
+}
+
+// ---------------------------------------------------------------- feedback
+
+export async function listAllFeedback() {
+  const snap = await getDocs(collection(db, 'feedback'))
+  return snap.docs.map((d) => d.data())
+}
+
+/** Doc id is `${sessionId}--${fromUser}` so a student can only rate a given session once. */
+export async function submitFeedback(feedback) {
+  await setDoc(doc(db, 'feedback', `${feedback.sessionId}--${feedback.fromUser}`), feedback)
 }
 
 // ---------------------------------------------------------------- class requests

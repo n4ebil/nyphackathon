@@ -21,6 +21,8 @@ export interface ParsedRequest {
   urgency: Urgency
   deadline?: string
   preferredFormat?: LearningFormat
+  /** Preferred session length in minutes, when the text mentions one (e.g. "30 min", "an hour"). */
+  duration?: number
   /** Which parts the parser is unsure about, surfaced in the UI for confirmation. */
   uncertain: string[]
 }
@@ -80,8 +82,20 @@ export function parseHelpRequest(text: string, course?: string, today = new Date
     urgency,
     deadline,
     preferredFormat,
+    duration: extractDuration(lower),
     uncertain,
   }
+}
+
+/** "30 min", "45 minutes", "an hour", "1.5 hours", "2 hr" -> minutes. */
+export function extractDuration(lower: string): number | undefined {
+  if (/\bhalf an hour\b|\bhalf hour\b/.test(lower)) return 30
+  if (/\ban hour\b|\b1 hour\b|\bone hour\b/.test(lower)) return 60
+  const hourMatch = lower.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\b/)
+  if (hourMatch) return Math.round(parseFloat(hourMatch[1]) * 60)
+  const minMatch = lower.match(/(\d+)\s*(?:minutes?|mins?)\b/)
+  if (minMatch) return parseInt(minMatch[1], 10)
+  return undefined
 }
 
 /**

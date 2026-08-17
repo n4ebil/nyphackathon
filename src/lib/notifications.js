@@ -12,7 +12,7 @@
 const SEEN_KEY_PREFIX = 'nypkaki-seen-notifications-'
 const CLASS_READY_THRESHOLD = 3
 
-export function computeNotifications({ userId, matchRequests, classRequests, classInterests, teachingSubjects }) {
+export function computeNotifications({ userId, matchRequests, classRequests, classInterests, teachingSubjects, learningRequests }) {
   const items = []
   const { incoming = [], outgoing = [] } = matchRequests || {}
 
@@ -65,6 +65,26 @@ export function computeNotifications({ userId, matchRequests, classRequests, cla
         })
       }
     }
+  }
+
+  // "Waitlist" — a student's own past request that had no tutor at the time,
+  // where someone has since started teaching that competency. Computed live
+  // from existing data, not a stored flag, so it needs no new collection.
+  const myRequests = (learningRequests || []).filter((r) => r.userId === userId)
+  const alreadyRequestedModules = new Set(outgoing.map((r) => r.moduleName))
+  const notifiedModules = new Set()
+  for (const req of myRequests) {
+    if (notifiedModules.has(req.moduleId) || alreadyRequestedModules.has(req.moduleName)) continue
+    const nowTeaching = teachingSubjects.find((s) => s.moduleId === req.moduleId && s.userId !== userId)
+    if (!nowTeaching) continue
+    notifiedModules.add(req.moduleId)
+    items.push({
+      id: `waitlist-${req.moduleId}`,
+      icon: 'spark',
+      text: `Someone now teaches ${req.moduleName} — you asked about this before`,
+      href: '/dashboard',
+      createdAt: req.createdAt,
+    })
   }
 
   items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))

@@ -6,25 +6,29 @@ import type {
   Match,
   ScoreFactor,
   TeachingSubject,
+  TutorStats,
   User,
 } from './types.ts'
 
 /**
- * Deterministic compatibility scoring.
- *
- * Weights come straight from the project plan and must add up to 100:
- *   module 40 · topics 25 · availability 20 · format 10 · experience 5
+ * Deterministic compatibility scoring — weights must add up to 100:
+ *   module 35 · topics 20 · availability 20 · format 10 · experience 5 · reliability 10
  *
  * Nothing here calls an AI model on purpose — the number a student sees has to
- * be reproducible and explainable line by line. Bedrock only phrases the
+ * be reproducible and explainable line by line. Gemini only phrases the
  * result afterwards (see `buildExplanation`).
+ *
+ * `reliability` was carved out of `module`+`topics` (40->35, 25->20) rather than
+ * tacked on top, so a real track record can move the score without inflating
+ * everyone's ceiling above 100.
  */
 export const WEIGHTS = {
-  module: 40,
-  topics: 25,
+  module: 35,
+  topics: 20,
   availability: 20,
   format: 10,
   experience: 5,
+  reliability: 10,
 } as const
 
 /** Shared free time above this (minutes/week) counts as full marks. */
@@ -37,6 +41,8 @@ export interface ScoreInput {
   tutor: User
   tutorSubject: TeachingSubject
   tutorSlots: AvailabilitySlot[]
+  /** Real, computed track record — undefined/isNew both score as neutral (full marks), never as a penalty. */
+  tutorStats?: TutorStats
 }
 
 export interface ScoreResult {
@@ -212,6 +218,32 @@ function scoreExperience(subject: TeachingSubject): ScoreFactor {
   }
 }
 
+function scoreReliability(stats: TutorStats | undefined): ScoreFactor {
+  const label = 'Tutor reliability'
+  if (!stats || stats.isNew) {
+    return {
+      label,
+      earned: WEIGHTS.reliability,
+      max: WEIGHTS.reliability,
+      detail: 'New tutor — no completed sessions yet, so this counts full rather than against them',
+    }
+  }
+  // Rating carries most of the weight; a track record of actually responding tops it up.
+  const ratingPart = stats.avgRating != null ? (stats.avgRating / 5) * 8 : 8
+  const responsePart = stats.responseRate != null ? (stats.responseRate / 100) * 2 : 2
+  const earned = Math.round(ratingPart + responsePart)
+  const bits: string[] = []
+  if (stats.avgRating != null) bits.push(`${stats.avgRating}/5 from ${stats.ratingCount} review${stats.ratingCount === 1 ? '' : 's'}`)
+  if (stats.sessionsCompleted) bits.push(`${stats.sessionsCompleted} session${stats.sessionsCompleted === 1 ? '' : 's'} completed`)
+  if (stats.responseRate != null) bits.push(`responds to ${stats.responseRate}% of requests`)
+  return {
+    label,
+    earned: Math.min(earned, WEIGHTS.reliability),
+    max: WEIGHTS.reliability,
+    detail: bits.length ? bits.join(' · ') : 'No feedback yet',
+  }
+}
+
 export function scoreMatch(input: ScoreInput): ScoreResult {
   const shared = overlappingSlots(input.studentSlots, input.tutorSlots)
   const topics = scoreTopics(input.request, input.tutorSubject)
@@ -221,6 +253,7 @@ export function scoreMatch(input: ScoreInput): ScoreResult {
     scoreAvailability(shared),
     scoreFormat(input.request.preferredFormat, input.tutor.preferredFormat),
     scoreExperience(input.tutorSubject),
+    scoreReliability(input.tutorStats),
   ]
   return {
     score: breakdown.reduce((sum, f) => sum + f.earned, 0),
@@ -253,6 +286,8 @@ export interface MatchInput {
   studentTeaches: TeachingSubject[]
   /** Open requests from everyone, used to spot a mutual learning opportunity. */
   openRequests: LearningRequest[]
+  /** Real computed track record per tutor userId — see shared/reliability.ts. Missing entry scores as neutral (new tutor). */
+  tutorStats?: Record<string, TutorStats>
 }
 
 /**
@@ -271,6 +306,7 @@ export function findMatches(input: MatchInput): Match[] {
 
     // A tutor may teach several relevant modules — keep only their best fit.
     const tutorSlots = input.availability.filter((a) => a.userId === tutor.userId)
+    const tutorStats = input.tutorStats?.[tutor.userId]
     let best: (ScoreResult & { subject: TeachingSubject }) | null = null
     for (const subject of subjects) {
       const result = scoreMatch({
@@ -280,6 +316,7 @@ export function findMatches(input: MatchInput): Match[] {
         tutor,
         tutorSubject: subject,
         tutorSlots,
+        tutorStats,
       })
       if (!best || result.score > best.score) best = { ...result, subject }
     }
@@ -297,6 +334,7 @@ export function findMatches(input: MatchInput): Match[] {
       coveredTopics: best.coveredTopics,
       sharedSlots: best.sharedSlots,
       reciprocal: findReciprocal(tutor, input),
+      tutorStats,
       status: 'suggested',
       explanation: undefined,
     })
@@ -352,6 +390,8 @@ export function buildExplanation(match: Match, request: LearningRequest): string
   else if (ratio('Availability overlap') > 0) strengths.push('share some free time with you')
 
   if (ratio('Learning format') === 1) strengths.push('prefer the same session format as you')
+  if (match.tutorStats?.avgRating && match.tutorStats.avgRating >= 4.5)
+    strengths.push(`have a strong track record (${match.tutorStats.avgRating}/5 from past students)`)
 
   // Only one caveat — the weakest factor that actually costs meaningful points.
   const caveats: string[] = []
