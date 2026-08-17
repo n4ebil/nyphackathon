@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Icon } from './Icon.jsx'
 import { Avatar } from './Avatar.jsx'
+import { NotificationBell } from './NotificationBell.jsx'
 
 const NAV = [
   ['/dashboard', 'Dashboard', 'home'],
@@ -60,9 +61,7 @@ export function Layout() {
             NYP<span>kaki</span>
           </div>
           <div className="header-actions">
-            <button className="notify">
-              <Icon name="bell" size={20} />
-            </button>
+            <NotificationBell />
             <button className="avatar small self" onClick={() => navigate('/profile')}>
               {(user?.name || user?.email || '?')[0]?.toUpperCase()}
             </button>
