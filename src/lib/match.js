@@ -3,6 +3,8 @@ import { extractAvailability, parseHelpRequest } from '../shared/nlp.ts'
 import { MODULES, modulesForCourse } from '../shared/nyp.ts'
 import { computeTutorStats } from '../shared/reliability.ts'
 import { generateLearningGoal, pickModuleWithAI } from './ai.js'
+import { isAwsConfigured, computeMatchesRemote } from './awsApi.js'
+import { areRelatedModules } from '../shared/nyp.ts'
 import {
   createClassRequest,
   createLearningRequest,
@@ -131,7 +133,7 @@ export async function submitClassRequest(student, text) {
   return createClassRequest(request)
 }
 
-/** Ranks every other user against one learning request, using the shared deterministic scoring model. */
+/** Ranks every other user against one learning request. Uses the AWS Lambda scoring engine when configured, falling back to the identical local logic (shared/matching.ts) otherwise. */
 export async function computeMatches(student, request) {
   const [candidates, teachingSubjects, availability, studentSlots, openRequests, feedback, sessions, matchRequests] =
     await Promise.all([
@@ -157,6 +159,33 @@ export async function computeMatches(student, request) {
     })
   }
 
+  const studentTeaches = teachingSubjects.filter((s) => s.userId === student.userId)
+
+  if (isAwsConfigured) {
+    const withRelation = teachingSubjects.map((s) => ({
+      ...s,
+      moduleRelation:
+        s.moduleId === request.moduleId ? 'exact' : areRelatedModules(s.moduleId, request.moduleId) ? 'related' : 'none',
+    }))
+
+    try {
+      const { matches } = await computeMatchesRemote({
+        student,
+        request,
+        studentSlots,
+        candidates,
+        teachingSubjects: withRelation,
+        availability,
+        studentTeaches,
+        openRequests,
+        tutorStats,
+      })
+      return matches
+    } catch (err) {
+      console.error('AWS matching API unavailable, falling back to local scoring.', err)
+    }
+  }
+
   const matches = findMatches({
     student,
     request,
@@ -164,7 +193,7 @@ export async function computeMatches(student, request) {
     candidates,
     teachingSubjects,
     availability,
-    studentTeaches: teachingSubjects.filter((s) => s.userId === student.userId),
+    studentTeaches,
     openRequests,
     tutorStats,
   })
