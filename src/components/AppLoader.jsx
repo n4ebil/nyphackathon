@@ -3,7 +3,7 @@ export function AppLoader({ compact = false }) {
     <div className={'app-loader' + (compact ? ' compact' : '')}>
       <div className="app-loader-inner">
         <div className="app-loader-orbit">
-          <div className="app-loader-mark">N</div>
+          <img className="app-loader-mark" src="/icon.svg" alt="" />
           <div className="orbit-ring">
             <span className="orbit-dot dot-1" />
             <span className="orbit-dot dot-2" />
