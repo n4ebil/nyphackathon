@@ -5,3 +5,9 @@ dist
 .DS_Store
 .vercel
 .env*
+functions/node_modules
+functions/.secret.local
+functions/.env*
+firebase-debug.log
+firestore-debug.log
+.firebase

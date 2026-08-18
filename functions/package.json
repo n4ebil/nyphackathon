@@ -1,0 +1,21 @@
+{
+  "name": "nypkaki-functions",
+  "description": "Server-side pieces NYPkaki's client-only app can't do itself: sending real email and creating real Zoom meetings, both of which need secret credentials that can never live in the browser bundle.",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0",
+    "nodemailer": "^6.9.0"
+  }
+}

@@ -233,6 +233,18 @@ function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSaveP
                 </div>
               </div>
 
+              {!completedGroup && !cancelledGroup && session.format === 'online' && (
+                <p className="recommend-copy zoom-note">
+                  {session.zoomLink ? (
+                    <a href={session.zoomLink} target="_blank" rel="noreferrer" className="zoom-link">
+                      <Icon name="location" size={12} /> Join Zoom Meeting
+                    </a>
+                  ) : (
+                    <><Icon name="clock" size={12} /> Zoom link is being generated — check back in a moment.</>
+                  )}
+                </p>
+              )}
+
               {topics.length > 0 && (
                 <div className="chips request-topics">
                   {topics.map((t) => <span key={t}>{t}</span>)}
@@ -288,8 +300,19 @@ function SessionDetailModal({ r, session, role, other, topics, onClose }) {
             <div><span className="tutor-topics-label">Day</span><b>{session.day}</b></div>
             <div><span className="tutor-topics-label">Time</span><b>{session.startTime}–{session.endTime}</b></div>
             <div><span className="tutor-topics-label">Format</span><b>{session.format === 'online' ? 'Online' : 'In-person'}</b></div>
-            <div><span className="tutor-topics-label">{session.format === 'online' ? 'Link' : 'Location'}</span><b>{session.location}</b></div>
+            <div><span className="tutor-topics-label">Location</span><b>{session.location}</b></div>
           </div>
+          {session.format === 'online' && (
+            <p className="recommend-copy zoom-note">
+              {session.zoomLink ? (
+                <a href={session.zoomLink} target="_blank" rel="noreferrer" className="zoom-link">
+                  <Icon name="location" size={12} /> Join Zoom Meeting
+                </a>
+              ) : (
+                <><Icon name="clock" size={12} /> Zoom link is being generated — check back in a moment.</>
+              )}
+            </p>
+          )}
         </div>
 
         {session.plan && (

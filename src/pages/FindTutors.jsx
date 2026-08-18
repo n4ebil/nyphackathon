@@ -297,7 +297,7 @@ export function FindTutors() {
         <div>
           <p className="eyebrow">FIND A TUTOR</p>
           <h1>Browse tutors on NYPkaki</h1>
-          <p className="sub">Filter by module, topic, availability and format — every match % is computed from real data.</p>
+          <p className="sub">Filter by module, topic, availability and format.</p>
         </div>
       </div>
 

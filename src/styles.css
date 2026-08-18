@@ -726,6 +726,11 @@ input.plan-block-time { width: 92px; }
 .request-topics { margin-top: 14px; }
 .cancelled-note { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--red); }
 
+.zoom-note { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.zoom-link { display: flex; align-items: center; gap: 6px; color: var(--blue); font-weight: 700; text-decoration: none; }
+.zoom-link:hover { text-decoration: underline; }
+.arrange-zoom-hint { margin-top: 10px; font-style: italic; }
+
 .score-pill.sm { padding: 5px 11px; border-radius: 12px; }
 .score-pill.sm b { font-size: 12px; }
 

@@ -271,14 +271,19 @@ function ArrangeForm({ matchId, busy, onArrange, onCancel, relabel }) {
           </select>
         </label>
         <label className="field arrange-location">
-          {format === 'online' ? 'Meeting link' : 'Location'}
+          {format === 'online' ? 'Notes (optional)' : 'Location'}
           <input
-            placeholder={format === 'online' ? 'e.g. Zoom link' : 'e.g. Campus library'}
+            placeholder={format === 'online' ? 'A Zoom link is created automatically' : 'e.g. Campus library'}
             value={location}
             onChange={(e) => setLocation(e.target.value)}
           />
         </label>
       </div>
+      {format === 'online' && (
+        <p className="recommend-copy arrange-zoom-hint">
+          A real Zoom meeting is created automatically once confirmed — no need to paste a link.
+        </p>
+      )}
       <div className="arrange-actions">
         {onCancel && <button className="outline" disabled={busy} onClick={onCancel}>Cancel</button>}
         <button

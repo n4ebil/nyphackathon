@@ -112,6 +112,13 @@ export interface Session {
   location: string
   status: 'arranged' | 'completed' | 'cancelled'
   plan?: SessionPlan
+  /** Set by the onSessionCreated Cloud Function for online sessions — a real, unique meeting created via the Zoom API, not a manually-typed link. */
+  zoomLink?: string
+  /** Host-only "start" link — saved for completeness but not surfaced in the UI yet. */
+  zoomStartUrl?: string
+  zoomMeetingId?: string | number
+  /** ISO timestamp — set by the sendClassReminders scheduled function once a reminder email has gone out, so it never sends twice. */
+  reminderSentAt?: string
 }
 
 export interface Feedback {
