@@ -106,6 +106,7 @@ export async function submitLearningRequest(student, text, fields) {
     deadline: resolved.deadline || null,
     preferredFormat: resolved.preferredFormat || student.preferredFormat || 'either',
     duration: resolved.duration || 60,
+    goal: resolved.goal || null,
     createdAt: new Date().toISOString(),
     parsedBy: resolved.parsedBy || 'local',
   }

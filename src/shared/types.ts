@@ -43,6 +43,8 @@ export interface LearningRequest {
   preferredFormat: LearningFormat
   /** Preferred session length in minutes, e.g. 60. Shown to the tutor; not scored (no comparable tutor-side preference exists yet). */
   duration?: number
+  /** One-line statement of what the student wants to achieve — captured by the natural-language request flow, reused later when generating a session plan. */
+  goal?: string
 }
 
 export interface AvailabilitySlot {
@@ -82,7 +84,13 @@ export interface Match {
   explanation?: string
 }
 
+export type SessionPlanStage = 'warmup' | 'concepts' | 'practice' | 'questions' | 'recap'
+
 export interface SessionPlanBlock {
+  /** Fixed pedagogical stage this block represents — always all five, always in this order. */
+  stage: SessionPlanStage
+  title: string
+  /** Time range within the session, e.g. "0-10 min". */
   label: string
   description: string
 }

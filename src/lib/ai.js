@@ -100,15 +100,11 @@ export async function generateLearningGoal({ text, moduleName, topics }) {
 
 const PLAN_SCHEMA = Schema.object({
   properties: {
-    goal: Schema.string(),
-    blocks: Schema.array({
-      items: Schema.object({
-        properties: {
-          label: Schema.string(),
-          description: Schema.string(),
-        },
-      }),
-    }),
+    warmup: Schema.string(),
+    concepts: Schema.string(),
+    practice: Schema.string(),
+    questions: Schema.string(),
+    recap: Schema.string(),
   },
 })
 
@@ -120,56 +116,73 @@ function getPlanModel() {
   })
 }
 
+const STAGES = [
+  ['warmup', 'Warm-up & Review', 0.15],
+  ['concepts', 'Main Concepts', 0.35],
+  ['practice', 'Practice Activity', 0.25],
+  ['questions', 'Questions', 0.15],
+  ['recap', 'Final Recap', 0.1],
+]
+
+/** Splits the session length across the five fixed stages — deterministic on purpose, same reasoning as the rest of this file: a number a tutor plans a real session around should be reproducible, not something a model can drift on. */
+function buildBlocks(duration, content) {
+  const blocks = []
+  let elapsed = 0
+  STAGES.forEach(([stage, title, share], i) => {
+    const isLast = i === STAGES.length - 1
+    const mins = isLast ? Math.max(duration - elapsed, 5) : Math.round(duration * share)
+    blocks.push({ stage, title, label: `${elapsed}-${elapsed + mins} min`, description: content[stage] })
+    elapsed += mins
+  })
+  return blocks
+}
+
 /**
- * A short, timeboxed plan for one tutoring session — draft only, the tutor
- * edits it before the session. Falls back to a deterministic template
- * (scaled to the requested duration) whenever Gemini is unavailable, so this
- * never blocks the flow.
+ * A short, structured plan for one tutoring session, built around the
+ * student's actual module/topics/goal — draft only, the tutor edits it
+ * before the session. AI fills in the five stages' content; the time split
+ * is always computed the same deterministic way (see buildBlocks) so the
+ * numbers stay trustworthy even though the wording doesn't. Falls back to a
+ * template whenever Gemini is unavailable, so this never blocks the flow.
  */
-export async function generateSessionPlan({ moduleName, topics, description, durationMinutes }) {
+export async function generateSessionPlan({ moduleName, topics, description, goal, durationMinutes }) {
   const duration = durationMinutes || 60
+  const sessionGoal = goal || (topics.length ? `Get comfortable with ${topics.join(', ')}` : `Get help with ${moduleName}`)
+
   try {
     const model = getPlanModel()
-    if (!model) return templatePlan(moduleName, topics, duration)
+    if (!model) return templatePlan({ moduleName, topics, goal: sessionGoal, duration })
 
     const result = await model.generateContent(
-      `Draft a short peer-tutoring session plan for "${moduleName}".\n` +
+      `Draft content for a peer-tutoring session on "${moduleName}".\n` +
         `Topics to cover: ${topics.join(', ') || 'not specified'}.\n` +
-        `Student's own description of what they need: "${description}"\n` +
+        `Student's learning goal: "${sessionGoal}"\n` +
+        `Student's own description of what they need: "${description || 'not given'}"\n` +
         `Session length: ${duration} minutes.\n\n` +
-        `Return a one-sentence "goal" for the session, and 3-5 timeboxed "blocks" ` +
-        `(label like "0-10 min", description of what happens) that fit within ${duration} minutes total. ` +
-        `Keep it concrete and specific to the topics, not generic study advice.`,
+        `Write 1-2 concrete, specific sentences (not generic study advice) for each of these five stages:\n` +
+        `- warmup: a quick check on what the student already understands\n` +
+        `- concepts: the core explanation, specific to the topics above\n` +
+        `- practice: a hands-on exercise the student does during the session\n` +
+        `- questions: prompts for the student to attempt or ask about on their own\n` +
+        `- recap: what to reinforce before ending`,
     )
     const parsed = JSON.parse(result.response.text())
-    if (!parsed.blocks?.length) return templatePlan(moduleName, topics, duration)
-    return { goal: parsed.goal, blocks: parsed.blocks, generatedBy: 'ai' }
+    if (!parsed.concepts) return templatePlan({ moduleName, topics, goal: sessionGoal, duration })
+    return { goal: sessionGoal, blocks: buildBlocks(duration, parsed), generatedBy: 'ai' }
   } catch (err) {
     console.error('AI session plan unavailable, falling back to a template.', err)
-    return templatePlan(moduleName, topics, duration)
+    return templatePlan({ moduleName, topics, goal: sessionGoal, duration })
   }
 }
 
-function templatePlan(moduleName, topics, duration) {
+function templatePlan({ moduleName, topics, goal, duration }) {
   const topicList = topics.length ? topics.join(', ') : moduleName
-  const warmup = Math.round(duration * 0.15)
-  const core = Math.round(duration * 0.6)
-  const practice = Math.round(duration * 0.15)
-  const wrap = Math.max(duration - warmup - core - practice, 5)
-  let t = 0
-  const block = (mins, description) => {
-    const b = { label: `${t}-${t + mins} min`, description }
-    t += mins
-    return b
+  const content = {
+    warmup: `Quick check-in on what's already understood about ${topicList} and where it's breaking down`,
+    concepts: `Walk through ${topicList} together, tutor explaining and student attempting each step`,
+    practice: `Student works through a practice problem on ${topicList} while the tutor observes`,
+    questions: `Student asks about anything unclear and attempts a question on ${topicList} solo`,
+    recap: `Recap the key steps in ${topicList} and note anything to revisit next time`,
   }
-  return {
-    goal: `Get comfortable with ${topicList}`,
-    blocks: [
-      block(warmup, `Quick check-in on what's already understood about ${topicList} and where it's breaking down`),
-      block(core, `Work through ${topicList} together, tutor explaining and student attempting each step`),
-      block(practice, `Student tries a similar problem alone while the tutor observes`),
-      block(wrap, `Recap the key steps and note anything to revisit before the next session`),
-    ],
-    generatedBy: 'template',
-  }
+  return { goal, blocks: buildBlocks(duration, content), generatedBy: 'template' }
 }

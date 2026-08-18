@@ -235,16 +235,22 @@ export function FindTutors() {
       // A tutor's best-scoring subject can be a related-but-different module than
       // the one filtered on — in that case filters.topics belongs to the wrong
       // module's catalog, so fall back to the topics actually covered instead.
-      const topics = match.moduleId === filters.moduleId ? [...filters.topics] : match.coveredTopics
+      const sameModule = match.moduleId === filters.moduleId
+      const topics = sameModule ? [...filters.topics] : match.coveredTopics
+      // If this search came from the "describe what you need" flow for the same
+      // module, carry its goal/urgency/deadline/duration through — that's real
+      // context the student already gave, not something to silently drop.
+      const nl = sameModule && nlApplied?.moduleId === match.moduleId ? nlApplied : null
       const fields = {
         moduleId: match.moduleId,
         moduleName: match.moduleName,
         topics,
-        description: `Looking for help with ${match.moduleName}${topics.length ? ' — ' + topics.join(', ') : ''}.`,
-        urgency: 'medium',
-        deadline: null,
+        description: nl?.description || `Looking for help with ${match.moduleName}${topics.length ? ' — ' + topics.join(', ') : ''}.`,
+        goal: nl?.goal,
+        urgency: nl?.urgency || 'medium',
+        deadline: nl?.deadline || null,
         preferredFormat: request.preferredFormat,
-        duration: 60,
+        duration: nl?.duration || 60,
       }
       const saved = await submitLearningRequest(user, fields.description, fields)
       const matchId = `${saved.requestId}--${match.tutorId}`

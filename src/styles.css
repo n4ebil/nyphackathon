@@ -556,10 +556,19 @@ form input:disabled, form select:disabled, form textarea:disabled { background: 
 .plan-header b { font-size: 13px; }
 .plan-goal { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; font-style: italic; }
 .plan-blocks { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
-.plan-blocks li { font-size: 12.5px; display: flex; flex-direction: column; gap: 2px; background: var(--bg); border-radius: var(--r-sm); padding: 8px 10px; }
-.plan-blocks li b { color: var(--blue-dark); font-size: 11px; }
-.plan-blocks li input { font-weight: 700; color: var(--blue-dark); font-size: 11px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; }
+.plan-blocks li { font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); border-radius: var(--r-sm); padding: 10px 12px; }
+.plan-blocks li p { margin: 0; color: var(--muted); line-height: 1.5; }
+.plan-block-head { display: flex; align-items: center; gap: 7px; }
+.plan-block-icon { width: 20px; height: 20px; min-width: 20px; border-radius: 50%; background: var(--lav); color: var(--blue); display: grid; place-items: center; }
+.plan-block-head b { color: var(--ink); font-size: 12.5px; font-weight: 700; }
+.plan-block-time {
+  margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--blue-dark); background: var(--lav);
+  padding: 3px 8px; border-radius: 8px; white-space: nowrap; border: 0; text-align: right;
+}
+input.plan-block-time { width: 92px; }
 .plan-blocks li textarea { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 6px; min-height: 44px; }
+.plan-goal-edit { margin-top: 0 !important; margin-bottom: 10px; }
+.plan-goal-edit input { font-style: italic; }
 
 /* ---------------------------------------------------------------- feedback form */
 .feedback-form { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 10px; }

@@ -294,11 +294,7 @@ function SessionDetailModal({ r, session, role, other, topics, onClose }) {
           <div className="modal-section">
             <h3>Session plan</h3>
             <p className="plan-goal">{session.plan.goal}</p>
-            <ol className="plan-blocks">
-              {session.plan.blocks.map((b, i) => (
-                <li key={i}><b>{b.label}</b><span>{b.description}</span></li>
-              ))}
-            </ol>
+            <PlanBlocks blocks={session.plan.blocks} />
           </div>
         )}
       </div>
@@ -318,6 +314,34 @@ function FeedbackSection({ matchId, otherId, other, busy, onSubmit, feedbackFrom
   return <FeedbackForm matchId={matchId} otherId={otherId} other={other} busy={busy} onSubmit={onSubmit} />
 }
 
+const STAGE_ICON = { warmup: 'clock', concepts: 'book', practice: 'edit', questions: 'message', recap: 'check' }
+
+/** Renders plan blocks; falls back gracefully for plans saved before the stage/title fields existed. */
+function PlanBlocks({ blocks, editing, onUpdate }) {
+  return (
+    <ol className="plan-blocks">
+      {blocks.map((b, i) => (
+        <li key={i}>
+          <div className="plan-block-head">
+            <span className="plan-block-icon"><Icon name={STAGE_ICON[b.stage] || 'spark'} size={12} /></span>
+            <b>{b.title || 'Session block'}</b>
+            {editing ? (
+              <input className="plan-block-time" value={b.label} onChange={(e) => onUpdate(i, 'label', e.target.value)} />
+            ) : (
+              <span className="plan-block-time">{b.label}</span>
+            )}
+          </div>
+          {editing ? (
+            <textarea value={b.description} onChange={(e) => onUpdate(i, 'description', e.target.value)} />
+          ) : (
+            <p>{b.description}</p>
+          )}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 function SessionPlanPanel({ matchId, r, session, role, busy, onSave }) {
   const [plan, setPlan] = useState(session.plan || null)
   const [generating, setGenerating] = useState(false)
@@ -332,6 +356,7 @@ function SessionPlanPanel({ matchId, r, session, role, busy, onSave }) {
         moduleName: r.moduleName,
         topics: request?.topics || [],
         description: request?.description || r.message || r.moduleName,
+        goal: request?.goal,
         durationMinutes: request?.duration,
       })
       setPlan(generated)
@@ -350,7 +375,7 @@ function SessionPlanPanel({ matchId, r, session, role, busy, onSave }) {
       <div className="plan-panel empty">
         <p className="recommend-copy">No session plan yet.</p>
         <button className="card-btn inline" disabled={generating || busy} onClick={generate}>
-          {generating ? 'Generating…' : 'Generate session plan'} <Icon name="spark" size={14} />
+          {generating ? 'Generating…' : 'Generate Session Plan'} <Icon name="spark" size={14} />
         </button>
       </div>
     )
@@ -366,24 +391,15 @@ function SessionPlanPanel({ matchId, r, session, role, busy, onSave }) {
           </button>
         )}
       </div>
-      <p className="plan-goal">{plan.goal}</p>
-      <ol className="plan-blocks">
-        {plan.blocks.map((b, i) => (
-          <li key={i}>
-            {editing ? (
-              <>
-                <input value={b.label} onChange={(e) => updateBlock(i, 'label', e.target.value)} />
-                <textarea value={b.description} onChange={(e) => updateBlock(i, 'description', e.target.value)} />
-              </>
-            ) : (
-              <>
-                <b>{b.label}</b>
-                <span>{b.description}</span>
-              </>
-            )}
-          </li>
-        ))}
-      </ol>
+      {editing ? (
+        <label className="field plan-goal-edit">
+          Learning goal
+          <input value={plan.goal} onChange={(e) => setPlan((p) => ({ ...p, goal: e.target.value }))} />
+        </label>
+      ) : (
+        <p className="plan-goal">{plan.goal}</p>
+      )}
+      <PlanBlocks blocks={plan.blocks} editing={editing} onUpdate={updateBlock} />
       {editing && (
         <button className="card-btn inline" disabled={busy} onClick={() => { onSave(matchId, plan); setEditing(false) }}>
           Save plan
@@ -398,6 +414,7 @@ function PlanReadOnly({ plan }) {
     <div className="plan-panel readonly">
       <b>Session plan</b>
       <p className="plan-goal">{plan.goal}</p>
+      <PlanBlocks blocks={plan.blocks} />
     </div>
   )
 }
