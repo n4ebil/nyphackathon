@@ -251,27 +251,26 @@ export function Dashboard() {
                       const band = m.score >= 80 ? 'excellent' : m.score >= 60 ? 'good' : m.score >= 40 ? 'possible' : 'low'
                       return (
                         <article className="reco-card" key={m.matchId}>
-                          <div className={'reco-score ' + band}>
-                            <b>{m.score}%</b>
-                            <span>Match</span>
-                          </div>
                           <div className="reco-top">
                             <Avatar name={m.tutor.name || m.tutor.email} id={m.tutorId} small />
-                            <div>
+                            <div className="reco-top-info">
                               <h3>{m.tutor.name || 'A NYPkaki student'}</h3>
                               <p className="course">{m.moduleName}</p>
+                            </div>
+                            <div className={'reco-score ' + band}>
+                              <b>{m.score}%</b>
+                              <span>Match</span>
                             </div>
                           </div>
                           {m.coveredTopics.length > 0 && (
                             <p className="reco-topics">{m.coveredTopics.slice(0, 4).join(' • ')}</p>
                           )}
-                          <ul className="reco-meta">
-                            <li>
-                              ⭐ {stats && !stats.isNew && stats.avgRating != null ? `${stats.avgRating} · ${stats.sessionsCompleted} session${stats.sessionsCompleted === 1 ? '' : 's'}` : 'New tutor'}
-                            </li>
-                            <li>🕐 {slot ? `${slot.day} ${slot.startTime}–${slot.endTime}` : 'Availability not shared yet'}</li>
-                            <li>{formatIcon} {formatLabel}</li>
-                          </ul>
+                          <p className="reco-meta">
+                            ⭐ {stats && !stats.isNew && stats.avgRating != null ? <b>{stats.avgRating}</b> : 'New tutor'}
+                            {stats && !stats.isNew && stats.avgRating != null && ` · ${stats.sessionsCompleted} session${stats.sessionsCompleted === 1 ? '' : 's'}`}
+                            {' · '}🕐 {slot ? `${slot.day} ${slot.startTime}–${slot.endTime}` : 'no availability yet'}
+                            {' · '}{formatIcon} {formatLabel}
+                          </p>
                           <button className="dash-outline-btn wide" onClick={() => navigate('/find-tutors')}>View Profile</button>
                         </article>
                       )
