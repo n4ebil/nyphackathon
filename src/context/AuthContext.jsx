@@ -52,6 +52,14 @@ export function AuthProvider({ children }) {
         setLoading(false)
         return
       }
+      // Accounts created before contact email was stored in Firestore (or that
+      // predate this field entirely) won't have one — backfill it silently so
+      // features that read it (e.g. email notifications) have somewhere to send
+      // to, without forcing every existing user back into Profile first.
+      if (profile && !profile.email && fbUser.email) {
+        upsertUserProfile(fbUser.uid, { email: fbUser.email }).catch((err) => console.error('Could not backfill contact email.', err))
+        profile = { ...profile, email: fbUser.email }
+      }
       setUser({ userId: fbUser.uid, email: fbUser.email, ...profile })
       setLoading(false)
     })
@@ -89,8 +97,10 @@ export function AuthProvider({ children }) {
       // The Auth account exists past this point — don't fail the whole sign-up over a
       // Firestore write hiccup (e.g. rules not deployed yet), or a retry would just hit
       // "email already in use" with no way to finish setting up the profile.
+      // Contact email starts as the login email but is stored separately in Firestore
+      // (see Profile.jsx) so it can be changed later without touching the Auth account.
       try {
-        await upsertUserProfile(credential.user.uid, profile)
+        await upsertUserProfile(credential.user.uid, { ...profile, email })
       } catch (err) {
         console.error('Profile save failed after sign-up; it can be completed from the Profile page.', err)
       }

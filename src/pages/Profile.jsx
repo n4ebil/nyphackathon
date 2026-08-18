@@ -67,6 +67,8 @@ export function Profile() {
   const { user, refreshProfile } = useAuth()
   const [form, setForm] = useState({
     name: user.name || '',
+    email: user.email || '',
+    phone: user.phone || '',
     school: user.school || schoolForCourse(user.course),
     course: user.course || NYP_COURSE_CATALOG[0].courses[0],
     bio: user.bio || '',
@@ -272,6 +274,19 @@ export function Profile() {
               </select>
             </label>
           </div>
+          <div className="form-grid">
+            <label className="field">
+              Contact email
+              <input type="email" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            </label>
+            <label className="field">
+              Phone <span className="field-optional">(optional)</span>
+              <input type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="e.g. 9123 4567" />
+            </label>
+          </div>
+          <p className="recommend-copy field-note">
+            This is where request/session emails and reminders go — it doesn't have to match the email you log in with.
+          </p>
           <div className="form-grid">
             <label className="field">
               School

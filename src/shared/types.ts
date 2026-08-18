@@ -9,8 +9,10 @@ export interface User {
   name: string
   /** NYP admin number, e.g. "231045A". This is how students identify each other. */
   adminNo: string
-  /** NYP student mail, "<adminno>@mymail.nyp.edu.sg". */
+  /** Contact email — where request/session/reminder emails are sent. Starts as the login email at registration but is editable separately from it (see Profile.jsx), so it's stored here rather than only read from the Auth account. */
   email: string
+  /** Optional contact number — display only, not used for login or SMS. */
+  phone?: string
   /** Full diploma name, e.g. "Diploma in Information Technology". */
   course: string
   /** Year of study. NYP diplomas run three years. */

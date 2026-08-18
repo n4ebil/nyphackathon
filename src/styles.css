@@ -381,6 +381,8 @@ h1, h2, h3, p { margin-top: 0; }
 
 /* ---------------------------------------------------------------- forms */
 .field { font-size: 13px; font-weight: 700; display: grid; gap: 7px; margin-top: 16px; color: #453f5f; min-width: 0; }
+.field-optional { font-weight: 600; color: var(--muted-soft); text-transform: none; letter-spacing: 0; }
+.field-note { margin-top: 8px; font-style: italic; }
 .field input, .field select, .field textarea {
   width: 100%; min-width: 0; box-sizing: border-box;
   border: 1.5px solid var(--line); border-radius: var(--r-sm); padding: 11px 13px;
