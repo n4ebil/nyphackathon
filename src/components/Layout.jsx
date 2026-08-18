@@ -57,7 +57,7 @@ export function Layout() {
     <div className="app-shell">
       <aside>
         <div className="brand">
-          <div className="brand-mark">N</div>
+          <img className="brand-mark" src="/icon.svg" alt="NYPkaki" />
           <span>
             NYP<span>kaki</span>
           </span>
@@ -125,7 +125,7 @@ export function Layout() {
       <main>
         <header>
           <div className="mobile-brand">
-            <div className="brand-mark">N</div>
+            <img className="brand-mark" src="/icon.svg" alt="NYPkaki" />
             NYP<span>kaki</span>
           </div>
           <div className="header-actions">

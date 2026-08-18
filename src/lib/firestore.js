@@ -125,30 +125,45 @@ export async function getLearningRequest(requestId) {
 }
 
 // ---------------------------------------------------------------- match requests
+// Backed by AWS (API Gateway -> Lambda -> DynamoDB) when VITE_API_BASE_URL is
+// set; falls back to Firestore otherwise so local dev / a not-yet-deployed
+// Lambda never breaks the app. See src/lib/awsApi.js.
 
-/** matchId (from findMatches, `${requestId}--${tutorId}`) is used as the doc id so a match can only be requested once. */
+import {
+isAwsConfigured,
+sendMatchRequestRemote,
+listMatchRequestsRemote,
+listAllMatchRequestsRemote,
+respondToMatchRequestRemote,
+} from './awsApi.js'
+
+/** matchId (from findMatches, `${requestId}--${tutorId}`) is used as the doc id / partition key so a match can only be requested once. */
 export async function sendMatchRequest(matchRequest) {
-  await setDoc(doc(db, 'matchRequests', matchRequest.matchId), matchRequest)
+if (isAwsConfigured) return sendMatchRequestRemote(matchRequest)
+await setDoc(doc(db, 'matchRequests', matchRequest.matchId), matchRequest)
 }
 
 export async function listMatchRequests(userId) {
-  const [incoming, outgoing] = await Promise.all([
-    getDocs(query(collection(db, 'matchRequests'), where('tutorId', '==', userId))),
-    getDocs(query(collection(db, 'matchRequests'), where('studentId', '==', userId))),
-  ])
-  return {
-    incoming: incoming.docs.map((d) => d.data()),
-    outgoing: outgoing.docs.map((d) => d.data()),
-  }
+if (isAwsConfigured) return listMatchRequestsRemote(userId)
+const [incoming, outgoing] = await Promise.all([
+getDocs(query(collection(db, 'matchRequests'), where('tutorId', '==', userId))),
+getDocs(query(collection(db, 'matchRequests'), where('studentId', '==', userId))),
+])
+return {
+incoming: incoming.docs.map((d) => d.data()),
+outgoing: outgoing.docs.map((d) => d.data()),
+}
 }
 
 export async function respondToMatchRequest(matchId, status) {
-  await updateDoc(doc(db, 'matchRequests', matchId), { status })
+if (isAwsConfigured) return respondToMatchRequestRemote(matchId, status)
+await updateDoc(doc(db, 'matchRequests', matchId), { status })
 }
 
 export async function listAllMatchRequests() {
-  const snap = await getDocs(collection(db, 'matchRequests'))
-  return snap.docs.map((d) => d.data())
+if (isAwsConfigured) return listAllMatchRequestsRemote()
+const snap = await getDocs(collection(db, 'matchRequests'))
+return snap.docs.map((d) => d.data())
 }
 
 // ---------------------------------------------------------------- sessions
