@@ -171,3 +171,38 @@ export async function computeMatches(student, request) {
 
   return matches.map((match) => ({ ...match, explanation: buildExplanation(match, request) }))
 }
+
+/**
+ * Top tutor matches for the Dashboard's "Recommended for you" section — the
+ * exact same deterministic scoring as Find Tutors (computeMatches above),
+ * run against a sensible default request (the student's most recent
+ * learning request, or the first competency in their own course) so a real
+ * match % can be shown without making the student search first.
+ */
+export async function computeRecommendedTutors(student, { limit = 3 } = {}) {
+  const learningRequests = await listAllLearningRequests()
+  const mine = learningRequests
+    .filter((r) => r.userId === student.userId)
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+
+  const fallback = modulesForCourse(student.course)[0] || MODULES[0]
+  const moduleId = mine[0]?.moduleId || fallback?.moduleId
+  if (!moduleId) return []
+  const module = MODULES.find((m) => m.moduleId === moduleId) || fallback
+
+  const request = {
+    requestId: 'recommended',
+    userId: student.userId,
+    moduleId: module.moduleId,
+    moduleName: module.moduleName,
+    topics: mine[0]?.topics?.length ? mine[0].topics : module.topics,
+    description: '',
+    urgency: 'medium',
+    deadline: null,
+    preferredFormat: student.preferredFormat || 'either',
+    duration: 60,
+  }
+
+  const matches = await computeMatches(student, request)
+  return matches.slice(0, limit)
+}

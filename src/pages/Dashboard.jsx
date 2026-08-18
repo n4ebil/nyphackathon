@@ -8,11 +8,24 @@ import { AppLoader } from '../components/AppLoader.jsx'
 import {
   getSessionsByMatchIds,
   getTeachingSubjects,
+  listAllAvailability,
   listAllLearningRequests,
-  listAllTeachingSubjects,
   listMatchRequests,
   listUsers,
 } from '../lib/firestore.js'
+import { computeRecommendedTutors } from '../lib/match.js'
+
+const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const FORMAT_META = {
+  online: ['💻', 'Online'],
+  'in-person': ['📍', 'In-person'],
+  either: ['🔀', 'Flexible'],
+}
+
+function bestSlot(slots) {
+  if (!slots.length) return null
+  return [...slots].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))[0]
+}
 
 export function Dashboard() {
   const { user } = useAuth()
@@ -21,9 +34,10 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [recommended, setRecommended] = useState([])
+  const [availabilityByTutor, setAvailabilityByTutor] = useState({})
   const [nextSession, setNextSession] = useState(null)
   const [pending, setPending] = useState([])
-  const [stats, setStats] = useState({ completed: 0, modulesLearning: 0, tutoring: 0 })
+  const [stats, setStats] = useState({ completed: 0, modulesLearning: 0, tutoring: 0, upcoming: 0 })
 
   useEffect(() => {
     let cancelled = false
@@ -31,12 +45,13 @@ export function Dashboard() {
       setLoading(true)
       setLoadError('')
       try {
-        const [users, matchRequests, teachingSubjects, myTeaching, myRequests] = await Promise.all([
+        const [users, matchRequests, myTeaching, myRequests, availability, recommendedTutors] = await Promise.all([
           listUsers(),
           listMatchRequests(user.userId),
-          listAllTeachingSubjects(),
           getTeachingSubjects(user.userId),
           listAllLearningRequests(),
+          listAllAvailability(),
+          computeRecommendedTutors(user, { limit: 3 }),
         ])
         if (cancelled) return
 
@@ -45,9 +60,8 @@ export function Dashboard() {
         const sessions = allMatchIds.length ? await getSessionsByMatchIds(allMatchIds) : []
         if (cancelled) return
 
-        const upcoming = sessions
-          .filter((s) => s.status === 'arranged')
-          .sort((a, b) => (a.day + a.startTime).localeCompare(b.day + b.startTime))[0]
+        const arranged = sessions.filter((s) => s.status === 'arranged')
+        const upcoming = [...arranged].sort((a, b) => (a.day + a.startTime).localeCompare(b.day + b.startTime))[0]
 
         const pendingRows = [...matchRequests.incoming, ...matchRequests.outgoing]
           .filter((r) => r.status === 'pending')
@@ -58,23 +72,19 @@ export function Dashboard() {
             return { ...r, role, other: usersById[role === 'tutor' ? r.studentId : r.tutorId] }
           })
 
-        const tutorIds = new Set(teachingSubjects.map((s) => s.userId))
-        tutorIds.delete(user.userId)
-        const recommendedTutors = [...tutorIds]
-          .map((id) => ({
-            tutor: usersById[id],
-            subjects: teachingSubjects.filter((s) => s.userId === id),
-          }))
-          .filter((r) => r.tutor)
-          .slice(0, 3)
+        const slotsByTutor = {}
+        for (const m of recommendedTutors) {
+          slotsByTutor[m.tutorId] = availability.filter((a) => a.userId === m.tutorId)
+        }
 
         const completedCount = sessions.filter((s) => s.status === 'completed').length
         const modulesLearning = new Set(myRequests.filter((r) => r.userId === user.userId).map((r) => r.moduleId)).size
 
         setRecommended(recommendedTutors)
+        setAvailabilityByTutor(slotsByTutor)
         setNextSession(upcoming || null)
         setPending(pendingRows)
-        setStats({ completed: completedCount, modulesLearning, tutoring: myTeaching.length })
+        setStats({ completed: completedCount, modulesLearning, tutoring: myTeaching.length, upcoming: arranged.length })
       } catch (err) {
         if (!cancelled) setLoadError(err.message || 'Could not load your dashboard.')
       } finally {
@@ -92,22 +102,18 @@ export function Dashboard() {
 
   return (
     <>
-      <section className="hero-panel">
-        <div className="hero-text">
-          <p className="eyebrow">{today.toUpperCase()}</p>
-          <h1>
-            Hi {firstName} <span>👋</span>
-          </h1>
-          <p className="sub">What would you like to do today?</p>
+      <section className="dash-hero">
+        <div className="dash-hero-text">
+          <p className="eyebrow">WELCOME BACK, {firstName.toUpperCase()}</p>
+          <h1>Find the right peer to learn with.</h1>
+          <p className="sub">Tell us what you're struggling with and we'll find students who can help.</p>
         </div>
-        <div className="hero-actions">
-          <button className="match-btn" onClick={() => navigate('/find-tutors')}>
-            <span><Icon name="search" size={15} /></span>
-            Find a Tutor
+        <div className="dash-hero-actions">
+          <button className="dash-cta-primary" onClick={() => navigate('/find-tutors')}>
+            ✨ Tell us what you need
           </button>
-          <button className="hero-secondary" onClick={() => navigate('/profile#teaching')}>
-            <Icon name="plus" size={15} />
-            Offer Tutoring
+          <button className="dash-cta-secondary" onClick={() => navigate('/find-tutors')}>
+            Browse Tutors
           </button>
         </div>
       </section>
@@ -118,26 +124,33 @@ export function Dashboard() {
         <AppLoader compact />
       ) : (
         <>
-          <div className="stat-row">
-            <div className="stat-card">
-              <div className="stat-icon done"><Icon name="check" size={17} /></div>
+          <div className="dash-stats">
+            <div className="dash-stat">
+              <div className="dash-stat-icon done"><Icon name="check" size={16} /></div>
               <div>
                 <b>{stats.completed}</b>
                 <span>Sessions completed</span>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon learn"><Icon name="book" size={17} /></div>
+            <div className="dash-stat">
+              <div className="dash-stat-icon learn"><Icon name="book" size={16} /></div>
               <div>
                 <b>{stats.modulesLearning}</b>
-                <span>Modules you're learning</span>
+                <span>Modules learning</span>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon teach"><Icon name="spark" size={17} /></div>
+            <div className="dash-stat">
+              <div className="dash-stat-icon teach"><Icon name="spark" size={16} /></div>
               <div>
                 <b>{stats.tutoring}</b>
                 <span>Modules you teach</span>
+              </div>
+            </div>
+            <div className="dash-stat">
+              <div className="dash-stat-icon upcoming"><Icon name="clock" size={16} /></div>
+              <div>
+                <b>{stats.upcoming}</b>
+                <span>Upcoming sessions</span>
               </div>
             </div>
           </div>
@@ -167,9 +180,13 @@ export function Dashboard() {
                     </button>
                   </div>
                 ) : (
-                  <div className="empty-state compact">
-                    <span className="empty-icon">📅</span>
-                    <p>No upcoming sessions yet. Once a request is accepted and arranged, it'll show up here.</p>
+                  <div className="dash-empty">
+                    <div className="dash-empty-icon"><Icon name="calendar" size={19} /></div>
+                    <div className="dash-empty-body">
+                      <b>No sessions scheduled yet</b>
+                      <p>Once a tutor accepts your request and you arrange a time, it'll show up here.</p>
+                    </div>
+                    <button className="dash-outline-btn" onClick={() => navigate('/find-tutors')}>Find a tutor</button>
                   </div>
                 )}
               </section>
@@ -183,9 +200,12 @@ export function Dashboard() {
                   {pending.length > 0 && <Link to="/requests" className="view-tutors">View all <Icon name="chevron" size={14} /></Link>}
                 </div>
                 {pending.length === 0 ? (
-                  <div className="empty-state compact">
-                    <span className="empty-icon">✅</span>
-                    <p>Nothing pending. You're all caught up.</p>
+                  <div className="dash-empty">
+                    <div className="dash-empty-icon success"><Icon name="check" size={19} /></div>
+                    <div className="dash-empty-body">
+                      <b>You're all caught up</b>
+                      <p>Nothing waiting on a response right now.</p>
+                    </div>
                   </div>
                 ) : (
                   <div className="pending-list">
@@ -209,39 +229,53 @@ export function Dashboard() {
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">RECOMMENDED FOR YOU</p>
-                    <h2>Tutors on NYPkaki</h2>
+                    <h2>Tutors who fit your needs</h2>
                   </div>
                   <Link to="/find-tutors" className="view-tutors">Find more <Icon name="chevron" size={14} /></Link>
                 </div>
 
                 {recommended.length === 0 ? (
-                  <div className="empty-state compact">
-                    <span className="empty-icon">🎓</span>
-                    <p>No one's set up a tutor profile yet. Be the first — tap Offer Tutoring above.</p>
+                  <div className="dash-empty">
+                    <div className="dash-empty-icon"><Icon name="spark" size={19} /></div>
+                    <div className="dash-empty-body">
+                      <b>No tutors to recommend yet</b>
+                      <p>No one's set up a tutor profile for your modules yet — check back soon.</p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="tutor-grid two-col">
-                    {recommended.map(({ tutor, subjects }) => (
-                      <article className="tutor-card" key={tutor.userId}>
-                        <div className="tutor-top">
-                          <Avatar name={tutor.name || tutor.email} id={tutor.userId} />
-                        </div>
-                        <div className="tutor-name">
-                          <h3>{tutor.name || 'A NYPkaki student'}</h3>
-                        </div>
-                        <p className="course">
-                          {tutor.course || 'Course not set yet'} {tutor.year && <><b>•</b> Year {tutor.year}</>}
-                        </p>
-                        <div className="chips">
-                          {subjects.slice(0, 3).map((s) => (
-                            <span key={s.moduleId}>{s.moduleName}</span>
-                          ))}
-                        </div>
-                        <button className="card-btn" onClick={() => navigate('/find-tutors')}>
-                          Request tutoring <Icon name="arrow" size={16} />
-                        </button>
-                      </article>
-                    ))}
+                  <div className="reco-list">
+                    {recommended.map((m) => {
+                      const stats = m.tutorStats
+                      const slot = bestSlot(availabilityByTutor[m.tutorId] || [])
+                      const [formatIcon, formatLabel] = FORMAT_META[m.tutor.preferredFormat] || FORMAT_META.either
+                      const band = m.score >= 80 ? 'excellent' : m.score >= 60 ? 'good' : m.score >= 40 ? 'possible' : 'low'
+                      return (
+                        <article className="reco-card" key={m.matchId}>
+                          <div className={'reco-score ' + band}>
+                            <b>{m.score}%</b>
+                            <span>Match</span>
+                          </div>
+                          <div className="reco-top">
+                            <Avatar name={m.tutor.name || m.tutor.email} id={m.tutorId} small />
+                            <div>
+                              <h3>{m.tutor.name || 'A NYPkaki student'}</h3>
+                              <p className="course">{m.moduleName}</p>
+                            </div>
+                          </div>
+                          {m.coveredTopics.length > 0 && (
+                            <p className="reco-topics">{m.coveredTopics.slice(0, 4).join(' • ')}</p>
+                          )}
+                          <ul className="reco-meta">
+                            <li>
+                              ⭐ {stats && !stats.isNew && stats.avgRating != null ? `${stats.avgRating} · ${stats.sessionsCompleted} session${stats.sessionsCompleted === 1 ? '' : 's'}` : 'New tutor'}
+                            </li>
+                            <li>🕐 {slot ? `${slot.day} ${slot.startTime}–${slot.endTime}` : 'Availability not shared yet'}</li>
+                            <li>{formatIcon} {formatLabel}</li>
+                          </ul>
+                          <button className="dash-outline-btn wide" onClick={() => navigate('/find-tutors')}>View Profile</button>
+                        </article>
+                      )
+                    })}
                   </div>
                 )}
               </section>
