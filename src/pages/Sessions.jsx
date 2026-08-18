@@ -55,7 +55,9 @@ export function Sessions() {
           other: usersById[role === 'tutor' ? r.studentId : r.tutorId],
           topics: learningRequests[i]?.topics || [],
         }))
-        .filter(({ session }) => session)
+        // Same as Requests.jsx: the other person's account may have since been
+        // deleted, so skip rows that would otherwise reference a nonexistent user.
+        .filter(({ session, other }) => session && other)
         .sort((a, b) => (a.session.day + a.session.startTime).localeCompare(b.session.day + b.session.startTime))
       setRows(withSessions)
       setFeedback(allFeedback.filter((f) => matchIds.includes(f.sessionId)))
@@ -215,7 +217,7 @@ function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSaveP
                   <div>
                     <b>{r.moduleName}</b>
                     <small>
-                      With {other?.name || other?.email || 'a NYPkaki student'} · {session.day} {session.startTime}–{session.endTime} ·{' '}
+                      With {other.name || other.email} · {session.day} {session.startTime}–{session.endTime} ·{' '}
                       {session.format === 'online' ? 'Online' : 'In-person'} · {session.location}
                     </small>
                   </div>
@@ -261,7 +263,7 @@ function SessionDetailModal({ r, session, role, other, topics, onClose }) {
         <div className="modal-head">
           <Avatar name={other?.name || other?.email} id={other?.userId} />
           <div>
-            <h2>{other?.name || 'A NYPkaki student'}</h2>
+            <h2>{other?.name || other?.email || 'This account'}</h2>
             <p className="course">{role === 'tutor' ? 'Your student' : 'Your tutor'}</p>
           </div>
         </div>

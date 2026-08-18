@@ -156,11 +156,15 @@ export function Schedule() {
   }
 
   const interestsFor = (requestId) => interests.filter((i) => i.requestId === requestId)
-  const nameFor = (userId) => users.find((u) => u.userId === userId)?.name || users.find((u) => u.userId === userId)?.email || 'A tutor'
+  // A teachingSubjects record can outlive the account that created it (e.g. admin
+  // cleanup deletes the user but not their subjects) — drop those instead of
+  // showing a tutor who no longer exists.
   const tutorsFor = (moduleId) =>
     teachingSubjects
       .filter((s) => s.moduleId === moduleId)
-      .map((s) => ({ ...s, name: nameFor(s.userId) }))
+      .map((s) => ({ ...s, tutor: users.find((u) => u.userId === s.userId) }))
+      .filter((s) => s.tutor)
+      .map((s) => ({ ...s, name: s.tutor.name || s.tutor.email }))
       .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
 
   return (

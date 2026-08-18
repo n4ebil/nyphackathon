@@ -29,7 +29,6 @@ const TIME_BUCKETS = [
   ['afternoon', 'Afternoon (12–5pm)'],
   ['evening', 'Evening (after 5pm)'],
 ]
-
 function defaultModuleId(student, learningRequests) {
   const mine = learningRequests.filter((r) => r.userId === student.userId).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
   if (mine[0]?.moduleId) return mine[0].moduleId

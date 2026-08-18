@@ -42,13 +42,18 @@ export function Requests() {
         Promise.all(combined.map(({ r }) => getLearningRequest(r.matchId.split('--')[0]))),
       ])
       const sessionByMatch = Object.fromEntries(sessions.map((s) => [s.matchId, s]))
-      const withMeta = combined.map(({ r, role }, i) => ({
-        r,
-        role,
-        session: sessionByMatch[r.matchId],
-        other: usersById[role === 'tutor' ? r.studentId : r.tutorId],
-        topics: learningRequests[i]?.topics || [],
-      }))
+      const withMeta = combined
+        .map(({ r, role }, i) => ({
+          r,
+          role,
+          session: sessionByMatch[r.matchId],
+          other: usersById[role === 'tutor' ? r.studentId : r.tutorId],
+          topics: learningRequests[i]?.topics || [],
+        }))
+        // The other person's account may have since been deleted (e.g. admin
+        // cleanup) — their request/session records don't disappear with them,
+        // so skip rendering rows that would otherwise show a nonexistent user.
+        .filter((row) => row.other)
       setRows(withMeta)
     } catch (err) {
       setError(err.message || 'Could not load your requests.')
@@ -199,7 +204,7 @@ export function Requests() {
                   <Avatar name={other?.name || other?.email} id={other?.userId} small />
                   <div>
                     <b>{r.moduleName}</b>
-                    <small>{role === 'tutor' ? 'From' : 'To'} {other?.name || other?.email || 'a NYPkaki student'} · Requested {formatRequestedAt(r.createdAt)}</small>
+                    <small>{role === 'tutor' ? 'From' : 'To'} {other.name || other.email} · Requested {formatRequestedAt(r.createdAt)}</small>
                   </div>
                 </div>
                 <div className="request-meta">

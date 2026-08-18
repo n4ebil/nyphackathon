@@ -21,7 +21,6 @@ const FORMAT_META = {
   'in-person': ['📍', 'In-person'],
   either: ['🔀', 'Flexible'],
 }
-
 function bestSlot(slots) {
   if (!slots.length) return null
   return [...slots].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day))[0]
