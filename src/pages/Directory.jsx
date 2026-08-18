@@ -1,12 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useAuth } from '../context/AuthContext.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
 import { Icon } from '../components/Icon.jsx'
-import { deleteUserProfile, importDirectoryRows, listDirectory, listUsers, upsertUserProfile } from '../lib/firestore.js'
+import {
+  addAdminEmail,
+  cancelMatchRequest,
+  cancelSession,
+  deleteClassRequest,
+  deleteTeachingSubject,
+  deleteUserProfile,
+  importDirectoryRows,
+  listAdminEmails,
+  listAllMatchRequests,
+  listAllSessions,
+  listAllTeachingSubjects,
+  listClassRequests,
+  listDirectory,
+  listUsers,
+  removeAdminEmail,
+  upsertUserProfile,
+} from '../lib/firestore.js'
 import { parseStudentDirectory } from '../lib/csv.js'
 import { ADMIN_EMAILS } from '../lib/admin.js'
 import { NYP_COURSE_CATALOG, schoolsForCourse } from '../shared/nyp.ts'
 
 export function Directory() {
+  const { user } = useAuth()
   const [raw, setRaw] = useState('')
   const [parsed, setParsed] = useState(null)
   const [parseErr, setParseErr] = useState('')
@@ -25,6 +44,20 @@ export function Directory() {
   const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [busyId, setBusyId] = useState(null)
+
+  const [subjects, setSubjects] = useState([])
+  const [sessions, setSessions] = useState([])
+  const [matchRequests, setMatchRequests] = useState([])
+  const [classRequests, setClassRequests] = useState([])
+  const [loadingOverview, setLoadingOverview] = useState(true)
+  const [subjectSearch, setSubjectSearch] = useState('')
+  const [moderationBusyId, setModerationBusyId] = useState(null)
+
+  const [adminEmails, setAdminEmails] = useState([])
+  const [loadingAdminEmails, setLoadingAdminEmails] = useState(true)
+  const [newAdminEmail, setNewAdminEmail] = useState('')
+  const [addingAdmin, setAddingAdmin] = useState(false)
+  const [removingAdmin, setRemovingAdmin] = useState(null)
 
   async function loadExisting() {
     setLoadingExisting(true)
@@ -48,10 +81,153 @@ export function Directory() {
     }
   }
 
+  async function loadOverview() {
+    setLoadingOverview(true)
+    try {
+      const [allSubjects, allSessions, allMatchRequests, allClassRequests] = await Promise.all([
+        listAllTeachingSubjects(),
+        listAllSessions(),
+        listAllMatchRequests(),
+        listClassRequests(),
+      ])
+      setSubjects(allSubjects)
+      setSessions(allSessions)
+      setMatchRequests(allMatchRequests)
+      setClassRequests(allClassRequests)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoadingOverview(false)
+    }
+  }
+
+  async function loadAdminEmails() {
+    setLoadingAdminEmails(true)
+    try {
+      setAdminEmails(await listAdminEmails())
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoadingAdminEmails(false)
+    }
+  }
+
   useEffect(() => {
     loadExisting()
     loadStudents()
+    loadOverview()
+    loadAdminEmails()
   }, [])
+
+  const stats = useMemo(
+    () => ({
+      users: students.length,
+      tutors: new Set(subjects.map((s) => s.userId)).size,
+      upcomingSessions: sessions.filter((s) => s.status === 'arranged').length,
+      pendingRequests: matchRequests.filter((r) => r.status === 'pending').length,
+      openClassRequests: classRequests.filter((r) => r.status !== 'scheduled').length,
+    }),
+    [students, subjects, sessions, matchRequests, classRequests],
+  )
+  const loadingStats = loadingStudents || loadingOverview
+
+  const usersById = useMemo(() => Object.fromEntries(students.map((s) => [s.userId, s])), [students])
+  const nameFor = (userId) => usersById[userId]?.name || usersById[userId]?.email || 'Unknown'
+
+  async function onCancelMatchRequest(matchId) {
+    if (!confirm('Cancel this match request?')) return
+    setModerationBusyId(matchId)
+    setError('')
+    try {
+      await cancelMatchRequest(matchId)
+      setMatchRequests((prev) => prev.map((r) => (r.matchId === matchId ? { ...r, status: 'rejected' } : r)))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setModerationBusyId(null)
+    }
+  }
+
+  async function onDeleteClassRequest(requestId) {
+    if (!confirm('Delete this class request? Everyone interested will lose the listing.')) return
+    setModerationBusyId(requestId)
+    setError('')
+    try {
+      await deleteClassRequest(requestId)
+      setClassRequests((prev) => prev.filter((r) => r.requestId !== requestId))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setModerationBusyId(null)
+    }
+  }
+
+  async function onCancelSession(matchId) {
+    if (!confirm('Cancel this session?')) return
+    setModerationBusyId(matchId)
+    setError('')
+    try {
+      await cancelSession(matchId)
+      setSessions((prev) => prev.map((s) => (s.matchId === matchId ? { ...s, status: 'cancelled' } : s)))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setModerationBusyId(null)
+    }
+  }
+
+  async function onDeleteSubject(subject) {
+    if (!confirm(`Remove ${nameFor(subject.userId)}'s "${subject.moduleName}" listing?`)) return
+    setModerationBusyId(subject.id)
+    setError('')
+    try {
+      await deleteTeachingSubject(subject.id)
+      setSubjects((prev) => prev.filter((s) => s.id !== subject.id))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setModerationBusyId(null)
+    }
+  }
+
+  const filteredSubjects = subjects
+    .filter((s) => {
+      const q = subjectSearch.trim().toLowerCase()
+      if (!q) return true
+      return s.moduleName?.toLowerCase().includes(q) || nameFor(s.userId).toLowerCase().includes(q)
+    })
+    .sort((a, b) => nameFor(a.userId).localeCompare(nameFor(b.userId)))
+
+  async function onAddAdmin(e) {
+    e.preventDefault()
+    const email = newAdminEmail.trim().toLowerCase()
+    if (!email) return
+    setAddingAdmin(true)
+    setError('')
+    try {
+      await addAdminEmail(email)
+      setAdminEmails((prev) => (prev.includes(email) ? prev : [...prev, email]))
+      setNewAdminEmail('')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setAddingAdmin(false)
+    }
+  }
+
+  async function onRemoveAdmin(email) {
+    if (!confirm(`Remove admin access from ${email}?`)) return
+    setRemovingAdmin(email)
+    setError('')
+    try {
+      await removeAdminEmail(email)
+      setAdminEmails((prev) => prev.filter((e) => e !== email))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setRemovingAdmin(null)
+    }
+  }
 
   async function saveEdit(userId, patch) {
     setBusyId(userId)
@@ -191,12 +367,102 @@ export function Directory() {
       </div>
 
       <Banner kind="info">
-        Access is limited to {ADMIN_EMAILS.join(', ')} — enforced both here and in the Firestore rules, so it holds
-        even if someone finds the URL directly. Add more emails in <code>src/lib/admin.js</code> if others need in.
+        Access is limited to the bootstrap admins plus anyone granted below — enforced both here and in the
+        Firestore rules, so it holds even if someone finds the URL directly.
       </Banner>
+
+      {loadingStats ? (
+        <Spinner />
+      ) : stats && (
+        <div className="dash-stats admin-stats">
+          <div className="dash-stat">
+            <div className="dash-stat-icon"><Icon name="user" size={16} /></div>
+            <div>
+              <b>{stats.users}</b>
+              <span>Registered users</span>
+            </div>
+          </div>
+          <div className="dash-stat">
+            <div className="dash-stat-icon"><Icon name="spark" size={16} /></div>
+            <div>
+              <b>{stats.tutors}</b>
+              <span>Active tutors</span>
+            </div>
+          </div>
+          <div className="dash-stat">
+            <div className="dash-stat-icon"><Icon name="clock" size={16} /></div>
+            <div>
+              <b>{stats.upcomingSessions}</b>
+              <span>Upcoming sessions</span>
+            </div>
+          </div>
+          <div className="dash-stat">
+            <div className="dash-stat-icon"><Icon name="inbox" size={16} /></div>
+            <div>
+              <b>{stats.pendingRequests}</b>
+              <span>Pending requests</span>
+            </div>
+          </div>
+          <div className="dash-stat">
+            <div className="dash-stat-icon"><Icon name="book" size={16} /></div>
+            <div>
+              <b>{stats.openClassRequests}</b>
+              <span>Open class requests</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && <Banner kind="error">{error}</Banner>}
       {success && <Banner kind="info">{success}</Banner>}
+
+      <div className="card">
+        <h2>Admins</h2>
+        <p className="recommend-copy">
+          {ADMIN_EMAILS.join(', ')} {ADMIN_EMAILS.length === 1 ? 'is a' : 'are'} hardcoded bootstrap admin
+          {ADMIN_EMAILS.length === 1 ? '' : 's'} in <code>src/lib/admin.js</code> and can't be removed here. Anyone
+          added below gets the same access, stored in Firestore, without a code deploy.
+        </p>
+
+        <form className="search-row" onSubmit={onAddAdmin}>
+          <label className="field" style={{ flex: 1, marginRight: 12 }}>
+            Grant admin access
+            <input
+              type="email"
+              value={newAdminEmail}
+              onChange={(e) => setNewAdminEmail(e.target.value)}
+              placeholder="someone@example.com"
+            />
+          </label>
+          <button className="card-btn inline" type="submit" disabled={addingAdmin || !newAdminEmail.trim()}>
+            {addingAdmin ? <Spinner /> : 'Add admin'}
+          </button>
+        </form>
+
+        {loadingAdminEmails ? (
+          <Spinner />
+        ) : adminEmails.length === 0 ? (
+          <p className="recommend-copy">No additional admins yet.</p>
+        ) : (
+          <div className="slot-list">
+            {adminEmails.map((email) => (
+              <div key={email} className="request-mini">
+                <div>
+                  <b>{email}</b>
+                </div>
+                <button
+                  className="outline"
+                  onClick={() => onRemoveAdmin(email)}
+                  disabled={removingAdmin === email || email === user?.email?.toLowerCase()}
+                  title={email === user?.email?.toLowerCase() ? "Can't remove your own access" : 'Remove admin access'}
+                >
+                  {removingAdmin === email ? <Spinner /> : 'Remove'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="card">
         <h2>Import a roster</h2>
@@ -336,6 +602,127 @@ export function Directory() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Moderation</h2>
+        <p className="recommend-copy">
+          Every match request, class request, and session platform-wide. There's no delete endpoint for match
+          requests (AWS-backed), so "Cancel" rejects it the same way a tutor declining would.
+        </p>
+
+        {loadingOverview ? (
+          <Spinner />
+        ) : (
+          <>
+            <h3 className="mod-subheading">Match requests ({matchRequests.filter((r) => r.status === 'pending' || r.status === 'accepted').length} active)</h3>
+            {matchRequests.filter((r) => r.status === 'pending' || r.status === 'accepted').length === 0 ? (
+              <p className="recommend-copy">None active.</p>
+            ) : (
+              <div className="slot-list">
+                {matchRequests
+                  .filter((r) => r.status === 'pending' || r.status === 'accepted')
+                  .map((r) => (
+                    <div key={r.matchId} className="request-mini">
+                      <div>
+                        <b>{r.moduleName}</b>
+                        <small>
+                          {nameFor(r.studentId)} → {nameFor(r.tutorId)} · {r.status}
+                        </small>
+                      </div>
+                      <button
+                        className="outline"
+                        onClick={() => onCancelMatchRequest(r.matchId)}
+                        disabled={moderationBusyId === r.matchId}
+                      >
+                        {moderationBusyId === r.matchId ? <Spinner /> : 'Cancel'}
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            <h3 className="mod-subheading">Class requests ({classRequests.filter((r) => r.status !== 'scheduled').length} open)</h3>
+            {classRequests.filter((r) => r.status !== 'scheduled').length === 0 ? (
+              <p className="recommend-copy">None open.</p>
+            ) : (
+              <div className="slot-list">
+                {classRequests
+                  .filter((r) => r.status !== 'scheduled')
+                  .map((r) => (
+                    <div key={r.requestId} className="request-mini">
+                      <div>
+                        <b>{r.moduleName}</b>
+                        <small>Requested by {r.studentName}</small>
+                      </div>
+                      <button
+                        className="outline"
+                        onClick={() => onDeleteClassRequest(r.requestId)}
+                        disabled={moderationBusyId === r.requestId}
+                      >
+                        {moderationBusyId === r.requestId ? <Spinner /> : 'Delete'}
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            <h3 className="mod-subheading">Sessions ({sessions.filter((s) => s.status === 'arranged').length} upcoming)</h3>
+            {sessions.filter((s) => s.status === 'arranged').length === 0 ? (
+              <p className="recommend-copy">None upcoming.</p>
+            ) : (
+              <div className="slot-list">
+                {sessions
+                  .filter((s) => s.status === 'arranged')
+                  .map((s) => (
+                    <div key={s.matchId} className="request-mini">
+                      <div>
+                        <b>{s.day} · {s.startTime}–{s.endTime}</b>
+                        <small>{s.location} · {s.format}</small>
+                      </div>
+                      <button
+                        className="outline"
+                        onClick={() => onCancelSession(s.matchId)}
+                        disabled={moderationBusyId === s.matchId}
+                      >
+                        {moderationBusyId === s.matchId ? <Spinner /> : 'Cancel'}
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Teaching subjects ({loadingOverview ? '…' : subjects.length})</h2>
+        <p className="recommend-copy">Every tutor listing platform-wide. Remove a bad or duplicate entry without touching the tutor's account.</p>
+
+        <label className="field">
+          Search by module or tutor
+          <input value={subjectSearch} onChange={(e) => setSubjectSearch(e.target.value)} placeholder="e.g. Databases or Aaron" />
+        </label>
+
+        {loadingOverview ? (
+          <Spinner />
+        ) : filteredSubjects.length === 0 ? (
+          <p className="recommend-copy">No listings match.</p>
+        ) : (
+          <div className="slot-list" style={{ maxHeight: 320, overflow: 'auto' }}>
+            {filteredSubjects.map((s) => (
+              <div key={s.id} className="request-mini">
+                <div>
+                  <b>{s.moduleName}</b>
+                  <small>{nameFor(s.userId)} · confidence {s.confidence ?? '—'}</small>
+                </div>
+                <button className="outline" onClick={() => onDeleteSubject(s)} disabled={moderationBusyId === s.id}>
+                  {moderationBusyId === s.id ? <Spinner /> : 'Remove'}
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </div>

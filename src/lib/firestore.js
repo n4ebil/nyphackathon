@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '../firebase.js'
+import { isAdminEmail } from './admin.js'
 
 // ---------------------------------------------------------------- student directory
 // Pre-imported roster (name + course by admin number) so registration can
@@ -80,6 +81,11 @@ export async function getTeachingSubjects(userId) {
 export async function listAllTeachingSubjects() {
   const snap = await getDocs(collection(db, 'teachingSubjects'))
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+/** Admin moderation — removes a single listing (e.g. bad/duplicate entry) without touching the tutor's account. */
+export async function deleteTeachingSubject(docId) {
+  await deleteDoc(doc(db, 'teachingSubjects', docId))
 }
 
 /** Swaps a user's whole teaching list in one go — simplest correct model for a small self-reported list. */
@@ -164,6 +170,11 @@ export async function listAllMatchRequests() {
 if (isAwsConfigured) return listAllMatchRequestsRemote()
 const snap = await getDocs(collection(db, 'matchRequests'))
 return snap.docs.map((d) => d.data())
+}
+
+/** Admin moderation — there's no delete endpoint (AWS-backed or Firestore), so cancelling means rejecting like a tutor would. */
+export async function cancelMatchRequest(matchId) {
+  return respondToMatchRequest(matchId, 'rejected')
 }
 
 // ---------------------------------------------------------------- sessions
@@ -266,4 +277,31 @@ export async function unregisterInterest(requestId, userId) {
 export async function listAllClassInterests() {
   const snap = await getDocs(collection(db, 'classInterests'))
   return snap.docs.map((d) => d.data())
+}
+
+// ---------------------------------------------------------------- admin emails
+// Grants admin on top of the hardcoded bootstrap list in src/lib/admin.js (see
+// isAdmin() in firestore.rules) — lets admins add/remove other admins from the
+// UI without a code deploy, while the bootstrap list guarantees at least one
+// account can always get back in.
+
+export async function listAdminEmails() {
+  const snap = await getDocs(collection(db, 'adminEmails'))
+  return snap.docs.map((d) => d.id)
+}
+
+export async function addAdminEmail(email) {
+  await setDoc(doc(db, 'adminEmails', email.trim().toLowerCase()), { addedAt: new Date().toISOString() })
+}
+
+export async function removeAdminEmail(email) {
+  await deleteDoc(doc(db, 'adminEmails', email.trim().toLowerCase()))
+}
+
+/** Mirrors firestore.rules' isAdmin(): the hardcoded bootstrap list, or a doc in adminEmails. */
+export async function checkIsAdmin(email) {
+  if (!email) return false
+  if (isAdminEmail(email)) return true
+  const snap = await getDoc(doc(db, 'adminEmails', email.toLowerCase()))
+  return snap.exists()
 }

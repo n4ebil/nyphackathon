@@ -2,9 +2,22 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    // Keep in sync with ADMIN_EMAILS in src/lib/admin.js — this is the actual
-    // enforcement; the client-side check just keeps non-admins from seeing the page.
-    function isAdmin() { return signedIn() && request.auth.token.email == 'demo@peerlink.app'; }
+    // Two sources: the hardcoded bootstrap list (keep in sync with ADMIN_EMAILS in
+    // src/lib/admin.js — needed so there's always at least one admin even with an
+    // empty adminEmails collection) and the adminEmails collection managed from the
+    // admin page UI. Either one grants admin. This is the actual enforcement; the
+    // client-side check just keeps non-admins from seeing the page.
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.email in ['demo@peerlink.app', 'runrampage3@gmail.com'] ||
+        exists(/databases/$(database)/documents/adminEmails/$(request.auth.token.email))
+      );
+    }
+
+    match /adminEmails/{email} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
 
     // A user can always write their own profile. The admin page's edit/lock/delete
     // actions need to write *someone else's*, so admins can too.
@@ -16,7 +29,7 @@ service cloud.firestore {
     match /teachingSubjects/{docId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow update, delete: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     match /availability/{docId} {
@@ -34,16 +47,18 @@ service cloud.firestore {
     match /matchRequests/{matchId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;
-      allow update: if signedIn() && resource.data.tutorId == request.auth.uid;
+      allow update: if signedIn() && (resource.data.tutorId == request.auth.uid || isAdmin());
     }
 
-    // Doc id is the matchId it was arranged from — only the two people in that match can write it.
+    // Doc id is the matchId it was arranged from — only the two people in that match (or an admin) can write it.
     match /sessions/{matchId} {
       allow read: if signedIn();
-      allow write: if signedIn() &&
-        exists(/databases/$(database)/documents/matchRequests/$(matchId)) &&
-        (get(/databases/$(database)/documents/matchRequests/$(matchId)).data.tutorId == request.auth.uid ||
-         get(/databases/$(database)/documents/matchRequests/$(matchId)).data.studentId == request.auth.uid);
+      allow write: if signedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/matchRequests/$(matchId)) &&
+         (get(/databases/$(database)/documents/matchRequests/$(matchId)).data.tutorId == request.auth.uid ||
+          get(/databases/$(database)/documents/matchRequests/$(matchId)).data.studentId == request.auth.uid))
+      );
     }
 
     match /feedback/{docId} {
@@ -70,7 +85,7 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;
       allow update: if signedIn();
-      allow delete: if signedIn() && resource.data.studentId == request.auth.uid;
+      allow delete: if signedIn() && (resource.data.studentId == request.auth.uid || isAdmin());
     }
 
     match /classInterests/{interestId} {

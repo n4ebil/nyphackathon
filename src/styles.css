@@ -259,6 +259,9 @@ h1, h2, h3, p { margin-top: 0; }
 
 .count { background: var(--lav); color: var(--blue-dark); border-radius: 12px; padding: 3px 8px; font-size: 10.5px; font-weight: 800; }
 
+.mod-subheading { font-size: 13px; font-weight: 800; margin: 22px 0 0; }
+.mod-subheading:first-of-type { margin-top: 6px; }
+
 .request-mini { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding: 12px; border-radius: 15px; background: #fdfaf6; }
 .request-mini div { display: grid; gap: 3px; margin-right: auto; }
 .request-mini b { font-size: 13px; }
@@ -622,6 +625,7 @@ input.plan-block-time { width: 92px; }
 
 /* ---------------------------------------------------------------- dashboard stats */
 .dash-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 24px; }
+.admin-stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 8px; }
 .dash-stat {
   background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg);
   padding: 18px 20px; display: flex; align-items: center; gap: 13px; box-shadow: var(--shadow-card);
