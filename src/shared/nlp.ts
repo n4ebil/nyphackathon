@@ -1,5 +1,5 @@
 import { MODULES, modulesForCourse } from './nyp.ts'
-import type { LearningFormat, Urgency } from './types.ts'
+import type { LearningFormat, Urgency, Weekday } from './types.ts'
 
 /**
  * Local heuristic parser — the offline fallback for natural-language request
@@ -28,6 +28,7 @@ export interface ParsedRequest {
 }
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const WEEKDAY_ABBR: Weekday[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const URGENT_WORDS = ['test', 'exam', 'tomorrow', 'urgent', 'deadline', 'assessment', 'due']
 
@@ -98,6 +99,45 @@ export function extractDuration(lower: string): number | undefined {
   return undefined
 }
 
+/** Every weekday name mentioned in the text, with its character position. */
+function weekdayMentions(lower: string): { index: number; pos: number }[] {
+  const mentions: { index: number; pos: number }[] = []
+  WEEKDAYS.forEach((name, index) => {
+    const pos = lower.indexOf(name)
+    if (pos !== -1) mentions.push({ index, pos })
+  })
+  return mentions
+}
+
+/**
+ * A sentence like "test on Friday, I'm free Wednesday after 5pm" names two
+ * different weekdays for two different purposes. Picking "the first weekday
+ * in Sun-Sat order" (as a naive scan does) would silently return Wednesday
+ * for BOTH the deadline and the availability question, which is wrong for
+ * the deadline. Instead: with only one day mentioned, use it; with more than
+ * one, pick whichever sits closest to a word that signals what it's for
+ * ("test"/"due" for a deadline, "free"/"available" for availability), and
+ * fall back to whichever day appears first in the sentence if no such word
+ * is present at all.
+ */
+function pickWeekday(lower: string, contextWords: string[]): number | undefined {
+  const mentions = weekdayMentions(lower)
+  if (!mentions.length) return undefined
+  if (mentions.length === 1) return mentions[0].index
+
+  let anchorPos = -1
+  for (const word of contextWords) {
+    const pos = lower.indexOf(word)
+    if (pos !== -1 && (anchorPos === -1 || pos < anchorPos)) anchorPos = pos
+  }
+  if (anchorPos === -1) return [...mentions].sort((a, b) => a.pos - b.pos)[0].index
+
+  return mentions.reduce((best, m) => (Math.abs(m.pos - anchorPos) < Math.abs(best.pos - anchorPos) ? m : best)).index
+}
+
+const DEADLINE_WORDS = ['test', 'exam', 'due', 'deadline', 'assessment', 'quiz', 'by']
+const AVAILABILITY_WORDS = ['free', 'available', 'availability', 'works for me', 'can do']
+
 /**
  * Resolves "friday", "next monday", "tomorrow" to an ISO date.
  * Exported so the AI-assisted parser (backend/src/ai.ts) can reuse the same
@@ -108,13 +148,59 @@ export function extractDuration(lower: string): number | undefined {
 export function extractDeadline(lower: string, today: Date): string | undefined {
   if (lower.includes('tomorrow')) return toIso(addDays(today, 1))
 
-  const dayIndex = WEEKDAYS.findIndex((d) => lower.includes(d))
-  if (dayIndex === -1) return undefined
+  const dayIndex = pickWeekday(lower, DEADLINE_WORDS)
+  if (dayIndex === undefined) return undefined
 
   let delta = (dayIndex - today.getDay() + 7) % 7
   if (delta === 0) delta = 7 // "friday" said on a Friday means the next one
   if (lower.includes(`next ${WEEKDAYS[dayIndex]}`) && delta < 7) delta += 7
   return toIso(addDays(today, delta))
+}
+
+export interface AvailabilityHint {
+  day: Weekday
+  /** "HH:MM", 24h. Present only when the text names a time bound ("after 5pm", "before noon"). */
+  startTime?: string
+  endTime?: string
+}
+
+/**
+ * Reads a free-text availability window like "free Wednesday after 5pm" or
+ * "available before 3pm on Friday" into a concrete day + time bound. Purely
+ * keyword/regex based — same reasoning as the rest of this file: a phrase
+ * this structured doesn't need a model call to parse reliably, and a
+ * deterministic result is one a student can trust and edit with confidence.
+ * Requires an explicit availability word ("free", "available", ...) so a
+ * lone deadline day ("my test is on Friday") is never mistaken for an
+ * availability window.
+ */
+export function extractAvailability(lower: string): AvailabilityHint | undefined {
+  if (!AVAILABILITY_WORDS.some((w) => lower.includes(w))) return undefined
+
+  const dayIndex = pickWeekday(lower, AVAILABILITY_WORDS)
+  if (dayIndex === undefined) return undefined
+  const day = WEEKDAY_ABBR[dayIndex]
+
+  const afterMatch = lower.match(/after (\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+  const beforeMatch = lower.match(/before (\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+
+  let startTime = afterMatch ? toClockTime(afterMatch) : undefined
+  let endTime = beforeMatch ? toClockTime(beforeMatch) : undefined
+  if (startTime && !endTime) endTime = '23:00'
+  if (endTime && !startTime) startTime = '06:00'
+
+  return { day, startTime, endTime }
+}
+
+/** ["5", "30", "pm"] -> "17:30". No am/pm stated and hour <= 7 assumes evening, matching how students actually talk about after-school time. */
+function toClockTime(match: RegExpMatchArray): string {
+  let hour = parseInt(match[1], 10)
+  const minute = match[2] ? parseInt(match[2], 10) : 0
+  const period = match[3]
+  if (period === 'pm' && hour < 12) hour += 12
+  else if (period === 'am' && hour === 12) hour = 0
+  else if (!period && hour <= 7) hour += 12
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
 function addDays(date: Date, days: number): Date {

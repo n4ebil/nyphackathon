@@ -50,6 +50,54 @@ export async function pickModuleWithAI(text, course) {
   }
 }
 
+const GOAL_SCHEMA = Schema.object({
+  properties: {
+    goal: Schema.string(),
+  },
+})
+
+function getGoalModel() {
+  if (!ai) return null
+  return getGenerativeModel(ai, {
+    model: 'gemini-flash-latest',
+    generationConfig: { responseMimeType: 'application/json', responseSchema: GOAL_SCHEMA },
+  })
+}
+
+/**
+ * The one part of natural-language request parsing that genuinely needs a
+ * model rather than keyword matching: turning a free-text ask into a short,
+ * specific learning goal ("Understand insertion and deletion in linked
+ * lists") instead of restating the topic list. Everything else in the
+ * natural-language flow (module, urgency, deadline, availability, format)
+ * stays local and deterministic — see shared/nlp.ts — for the same reason
+ * `pickModuleWithAI` above is scoped narrowly: a number a student relies on
+ * should be reproducible, but a one-line paraphrase is exactly what a model
+ * is for.
+ *
+ * Swapping this for Amazon Bedrock later only means replacing the body of
+ * this function — callers just await a goal string either way.
+ */
+export async function generateLearningGoal({ text, moduleName, topics }) {
+  const fallback = topics.length ? `Get comfortable with ${topics.join(', ')}` : `Get help with ${moduleName}`
+  try {
+    const model = getGoalModel()
+    if (!model) return fallback
+
+    const result = await model.generateContent(
+      `A student wrote this help request: "${text}"\n` +
+        `It's been matched to the competency "${moduleName}"${topics.length ? ` (topics: ${topics.join(', ')})` : ''}.\n\n` +
+        `In one short sentence (under 12 words), what specifically do they want to achieve? ` +
+        `Be concrete, not generic — e.g. "Understand insertion and deletion in linked lists", not "Learn the topic better".`,
+    )
+    const parsed = JSON.parse(result.response.text())
+    return parsed.goal?.trim() || fallback
+  } catch (err) {
+    console.error('AI goal generation unavailable, falling back to a template.', err)
+    return fallback
+  }
+}
+
 const PLAN_SCHEMA = Schema.object({
   properties: {
     goal: Schema.string(),

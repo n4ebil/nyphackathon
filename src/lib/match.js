@@ -1,8 +1,8 @@
 import { findMatches, buildExplanation } from '../shared/matching.ts'
-import { parseHelpRequest } from '../shared/nlp.ts'
+import { extractAvailability, parseHelpRequest } from '../shared/nlp.ts'
 import { MODULES, modulesForCourse } from '../shared/nyp.ts'
 import { computeTutorStats } from '../shared/reliability.ts'
-import { pickModuleWithAI } from './ai.js'
+import { generateLearningGoal, pickModuleWithAI } from './ai.js'
 import {
   createClassRequest,
   createLearningRequest,
@@ -55,6 +55,34 @@ export async function previewLearningRequest(student, text) {
     description: text,
     urgency: parsed.urgency,
     deadline: parsed.deadline || null,
+    preferredFormat: parsed.preferredFormat || student.preferredFormat || 'either',
+    duration: parsed.duration || 60,
+    parsedBy,
+  }
+}
+
+/**
+ * Full natural-language understanding for the "describe what you need" flow
+ * on Find Tutors: module/topics (AI-assisted, see resolveModuleAndTopics),
+ * urgency/deadline/format/duration/availability (local, deterministic —
+ * shared/nlp.ts), and a one-line learning goal (AI, see generateLearningGoal
+ * in lib/ai.js). Nothing is saved here; the UI shows this back to the
+ * student to confirm or edit before it drives a search.
+ */
+export async function previewNaturalLanguageRequest(student, text) {
+  const { moduleId, moduleName, topics, parsed, parsedBy } = await resolveModuleAndTopics(student, text)
+  const availability = extractAvailability(text.toLowerCase())
+  const goal = await generateLearningGoal({ text, moduleName, topics })
+
+  return {
+    moduleId,
+    moduleName,
+    topics,
+    description: text,
+    goal,
+    urgency: parsed.urgency,
+    deadline: parsed.deadline || null,
+    availability,
     preferredFormat: parsed.preferredFormat || student.preferredFormat || 'either',
     duration: parsed.duration || 60,
     parsedBy,

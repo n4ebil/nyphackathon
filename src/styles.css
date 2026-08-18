@@ -700,6 +700,36 @@ form input:disabled, form select:disabled, form textarea:disabled { background: 
 .notif-feed-item:hover { transform: translateY(-1px); box-shadow: var(--shadow-hover); border-color: #ddd6ff; }
 .notif-feed-item > svg { color: var(--muted-soft); flex-shrink: 0; }
 
+/* ---------------------------------------------------------------- natural-language request */
+.nl-card {
+  position: relative; overflow: hidden;
+}
+.nl-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #7a6cff, var(--blue), #ff8a68);
+}
+.nl-card textarea { min-height: 72px; }
+.nl-card .match-btn { margin-top: 18px; }
+
+.nl-understood { list-style: none; margin: 20px 0 0; padding: 0; display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--line); }
+.nl-understood li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+  padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13px;
+}
+.nl-understood li span { color: var(--muted-soft); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; white-space: nowrap; }
+.nl-understood li b { text-align: right; font-weight: 700; color: var(--ink); }
+
+.nl-actions { display: flex; align-items: center; gap: 10px; margin-top: 20px; }
+.nl-actions .primary { margin-top: 0; }
+.text-btn { margin-left: auto; color: var(--muted-soft); font-size: 12.5px; font-weight: 700; padding: 8px; transition: color .15s; }
+.text-btn:hover { color: var(--red); }
+
+.nl-applied { padding: 16px 20px; }
+.nl-applied-row { display: flex; align-items: center; gap: 10px; color: var(--blue-dark); }
+.nl-applied-row svg { flex-shrink: 0; }
+.nl-applied-row p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.nl-applied-row p b { color: var(--ink); }
+
 /* ---------------------------------------------------------------- find tutors: filter bar */
 .filter-bar { display: flex; flex-direction: column; gap: 4px; }
 .filter-row { display: grid; grid-template-columns: 1.6fr 1.2fr .9fr 1fr .9fr; gap: 14px; align-items: end; }

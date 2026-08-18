@@ -18,7 +18,7 @@ import {
   listUsers,
   sendMatchRequest,
 } from '../lib/firestore.js'
-import { submitLearningRequest } from '../lib/match.js'
+import { previewNaturalLanguageRequest, submitLearningRequest } from '../lib/match.js'
 
 const BAND_LABELS = { excellent: 'Great fit', good: 'Good fit', possible: 'Possible fit', low: 'Not quite' }
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -56,6 +56,15 @@ export function FindTutors() {
   const [profileTutor, setProfileTutor] = useState(null)
   const [whyMatchTutor, setWhyMatchTutor] = useState(null)
   const [waitlisted, setWaitlisted] = useState(false)
+
+  // Natural-language "describe what you need" flow.
+  const [nlText, setNlText] = useState('')
+  const [nlBusy, setNlBusy] = useState(false)
+  const [nlError, setNlError] = useState('')
+  const [nlPreview, setNlPreview] = useState(null)
+  const [nlEditing, setNlEditing] = useState(false)
+  const [nlSlots, setNlSlots] = useState(null)
+  const [nlApplied, setNlApplied] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -128,7 +137,7 @@ export function FindTutors() {
     const scored = findMatches({
       student: user,
       request,
-      studentSlots: data.studentSlots,
+      studentSlots: nlSlots || data.studentSlots,
       candidates: data.users,
       teachingSubjects: data.teachingSubjects,
       availability: data.availability,
@@ -137,7 +146,7 @@ export function FindTutors() {
       tutorStats: data.tutorStatsById,
     })
     return scored.map((m) => ({ ...m, explanation: buildExplanation(m, request) }))
-  }, [request, data, user])
+  }, [request, data, user, nlSlots])
 
   const filteredMatches = useMemo(() => {
     if (!data) return []
@@ -180,6 +189,43 @@ export function FindTutors() {
     const mod = moduleId ? findModule(moduleId) : null
     setFilters({ search: '', moduleId: moduleId || '', topics: new Set(mod?.topics || []), day: 'any', time: 'any', format: 'any' })
     setWaitlisted(false)
+    setNlSlots(null)
+    setNlApplied(null)
+  }
+
+  async function understandRequest() {
+    if (!nlText.trim()) return
+    setNlBusy(true)
+    setNlError('')
+    try {
+      const preview = await previewNaturalLanguageRequest(user, nlText.trim())
+      setNlPreview(preview)
+      setNlEditing(false)
+    } catch (err) {
+      setNlError(err.message || 'Could not read that request. Please try again.')
+    } finally {
+      setNlBusy(false)
+    }
+  }
+
+  function applyNlPreview() {
+    if (!nlPreview) return
+    setFilters((f) => ({
+      ...f,
+      moduleId: nlPreview.moduleId,
+      topics: new Set(nlPreview.topics),
+      format: nlPreview.preferredFormat,
+      day: nlPreview.availability?.day || f.day,
+      time: nlPreview.availability?.startTime ? bucketOf(nlPreview.availability.startTime) : f.time,
+    }))
+    setNlSlots(
+      nlPreview.availability
+        ? [{ userId: user.userId, day: nlPreview.availability.day, startTime: nlPreview.availability.startTime || '00:00', endTime: nlPreview.availability.endTime || '23:59' }]
+        : null,
+    )
+    setNlApplied(nlPreview)
+    setNlPreview(null)
+    setNlText('')
   }
 
   async function requestSession(match, message) {
@@ -257,6 +303,22 @@ export function FindTutors() {
         <AppLoader compact />
       ) : (
         <>
+          <NaturalLanguageCard
+            text={nlText}
+            setText={setNlText}
+            busy={nlBusy}
+            error={nlError}
+            preview={nlPreview}
+            editing={nlEditing}
+            setEditing={setNlEditing}
+            setPreview={setNlPreview}
+            applied={nlApplied}
+            course={user.course}
+            onUnderstand={understandRequest}
+            onApply={applyNlPreview}
+            onDiscard={() => { setNlPreview(null); setNlText('') }}
+          />
+
           <div className="card filter-bar">
             <div className="filter-row">
               <label className="field filter-search">
@@ -400,6 +462,189 @@ export function FindTutors() {
         />
       )}
     </>
+  )
+}
+
+const URGENCY_LABEL = { low: 'Low', medium: 'Medium', high: 'High' }
+
+function formatAvailability(hint) {
+  if (!hint) return 'Not specified'
+  if (!hint.startTime) return DAY_FULL[hint.day] || hint.day
+  return `${DAY_FULL[hint.day] || hint.day}, ${to12h(hint.startTime)} – ${to12h(hint.endTime)}`
+}
+
+function formatDeadline(iso) {
+  if (!iso) return 'Not specified'
+  return new Date(iso).toLocaleDateString('en-SG', { weekday: 'long', day: 'numeric', month: 'short' })
+}
+
+/**
+ * "Describe what you need" — the natural-language alternative to manually
+ * setting the filters below. Understands the request (AI picks the module +
+ * generates a goal, everything else is parsed deterministically — see
+ * previewNaturalLanguageRequest), shows exactly what it understood, and only
+ * touches the real filters/scoring once the student confirms with Find
+ * Matches. This is the one AI feature in the app that isn't scoped to a
+ * single field — see lib/ai.js and shared/nlp.ts for the split.
+ */
+function NaturalLanguageCard({ text, setText, busy, error, preview, editing, setEditing, setPreview, applied, course, onUnderstand, onApply, onDiscard }) {
+  if (applied && !preview) {
+    return (
+      <div className="card nl-card nl-applied">
+        <div className="nl-applied-row">
+          <Icon name="spark" size={15} />
+          <p>
+            Using your description: <b>"{applied.description}"</b> — matched to <b>{applied.moduleName}</b>
+            {applied.availability ? ` with availability for ${formatAvailability(applied.availability)}` : ''}.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!preview) {
+    return (
+      <div className="card nl-card">
+        <p className="eyebrow">DESCRIBE WHAT YOU NEED</p>
+        <h2>Tell NYPkaki in your own words</h2>
+        <p className="recommend-copy">e.g. "I need help with linked lists for my test on Friday. I'm free Wednesday after 5pm."</p>
+        {error && <Banner kind="error">{error}</Banner>}
+        <label className="field">
+          <textarea placeholder="What do you need help with, and when are you free?" value={text} onChange={(e) => setText(e.target.value)} />
+        </label>
+        <button className="match-btn" onClick={onUnderstand} disabled={busy || !text.trim()}>
+          <span><Icon name="spark" size={15} /></span>
+          {busy ? <Spinner /> : 'Understand my request'}
+        </button>
+      </div>
+    )
+  }
+
+  if (editing) {
+    return <NlEditForm preview={preview} setPreview={setPreview} course={course} onDone={() => setEditing(false)} />
+  }
+
+  return (
+    <div className="card nl-card">
+      <p className="eyebrow">AI UNDERSTOOD</p>
+      <ul className="nl-understood">
+        <li><span>Module</span><b>{preview.moduleName}</b></li>
+        <li><span>Topic{preview.topics.length === 1 ? '' : 's'}</span><b>{preview.topics.length ? preview.topics.join(', ') : 'Not specified'}</b></li>
+        <li><span>Goal</span><b>{preview.goal}</b></li>
+        <li><span>Deadline</span><b>{formatDeadline(preview.deadline)}</b></li>
+        <li><span>Urgency</span><b>{URGENCY_LABEL[preview.urgency]}</b></li>
+        <li><span>Availability</span><b>{formatAvailability(preview.availability)}</b></li>
+        <li><span>Format</span><b>{preview.preferredFormat === 'either' ? 'Either' : preview.preferredFormat === 'online' ? 'Online' : 'In-person'}</b></li>
+      </ul>
+      <div className="nl-actions">
+        <button className="outline" onClick={() => setEditing(true)}>Edit</button>
+        <button className="primary" onClick={onApply}>Find Matches <Icon name="arrow" size={16} /></button>
+        <button className="text-btn" onClick={onDiscard}>Discard</button>
+      </div>
+    </div>
+  )
+}
+
+function NlEditForm({ preview, setPreview, course, onDone }) {
+  const [topicInput, setTopicInput] = useState('')
+  const options = useMemo(() => {
+    const own = modulesForCourse(course)
+    return own.length ? own : MODULES
+  }, [course])
+
+  function set(field, value) {
+    setPreview((p) => ({ ...p, [field]: value }))
+  }
+
+  function addTopic() {
+    const t = topicInput.trim()
+    if (!t || preview.topics.includes(t)) return
+    set('topics', [...preview.topics, t])
+    setTopicInput('')
+  }
+
+  return (
+    <div className="card nl-card">
+      <p className="eyebrow">EDIT WHAT AI UNDERSTOOD</p>
+      <p className="recommend-copy">"{preview.description}"</p>
+
+      <div className="review-grid">
+        <label className="field">
+          Module
+          <select value={preview.moduleId} onChange={(e) => {
+            const m = MODULES.find((mod) => mod.moduleId === e.target.value)
+            if (m) setPreview((p) => ({ ...p, moduleId: m.moduleId, moduleName: m.moduleName }))
+          }}>
+            {(options.some((m) => m.moduleId === preview.moduleId) ? options : [{ moduleId: preview.moduleId, moduleName: preview.moduleName }, ...options]).map((m) => (
+              <option key={m.moduleId} value={m.moduleId}>{m.moduleName}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Goal
+          <input value={preview.goal} onChange={(e) => set('goal', e.target.value)} />
+        </label>
+        <label className="field">
+          Urgency
+          <select value={preview.urgency} onChange={(e) => set('urgency', e.target.value)}>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <label className="field">
+          Deadline
+          <input type="date" value={preview.deadline || ''} onChange={(e) => set('deadline', e.target.value || null)} />
+        </label>
+        <label className="field">
+          Format
+          <select value={preview.preferredFormat} onChange={(e) => set('preferredFormat', e.target.value)}>
+            <option value="in-person">In-person</option>
+            <option value="online">Online</option>
+            <option value="either">Either</option>
+          </select>
+        </label>
+        <label className="field">
+          Available day
+          <select
+            value={preview.availability?.day || ''}
+            onChange={(e) => set('availability', e.target.value ? { ...preview.availability, day: e.target.value } : undefined)}
+          >
+            <option value="">Not specified</option>
+            {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
+        {preview.availability?.day && (
+          <>
+            <label className="field">
+              From
+              <input type="time" value={preview.availability.startTime || '06:00'} onChange={(e) => set('availability', { ...preview.availability, startTime: e.target.value })} />
+            </label>
+            <label className="field">
+              Until
+              <input type="time" value={preview.availability.endTime || '23:00'} onChange={(e) => set('availability', { ...preview.availability, endTime: e.target.value })} />
+            </label>
+          </>
+        )}
+      </div>
+
+      <label className="field">
+        Topics
+        <div className="chips editable-chips">
+          {preview.topics.map((t) => (
+            <span key={t}>
+              {t}
+              <button type="button" onClick={() => set('topics', preview.topics.filter((x) => x !== t))} aria-label={`Remove ${t}`}>×</button>
+            </span>
+          ))}
+          <input placeholder="Add a topic…" value={topicInput} onChange={(e) => setTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTopic() } }} />
+        </div>
+      </label>
+
+      <div className="review-actions">
+        <button className="primary" onClick={onDone}>Done editing <Icon name="check" size={16} /></button>
+      </div>
+    </div>
   )
 }
 
