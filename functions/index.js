@@ -14,7 +14,7 @@ const db = getFirestore()
 // Singapore region — this is an NYP app, no reason to run it in us-central1.
 setGlobalOptions({ region: 'asia-southeast1' })
 
-const EMAIL_SECRETS = [email.GMAIL_USER, email.GMAIL_APP_PASSWORD]
+const EMAIL_SECRETS = [email.RESEND_API_KEY]
 const ALL_SECRETS = [...EMAIL_SECRETS, ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET]
 
 async function getUser(uid) {

@@ -19,12 +19,6 @@ const NAV_GROUPS = [
   ]],
 ]
 
-/** Named in the sidebar spec but not backed by a page yet — shown so the structure reads as designed, not clickable so nothing here quietly 404s. */
-const SOON_ITEMS = [
-  ['My Learning', 'book'],
-  ['Settings', 'user'],
-]
-
 const MOBILE_NAV = [
   ['/dashboard', 'Home', 'home'],
   ['/find-tutors', 'Find', 'search'],
@@ -57,7 +51,7 @@ export function Layout() {
     <div className="app-shell">
       <aside>
         <div className="brand">
-          <img className="brand-mark" src="/icon.svg" alt="NYPkaki" />
+          <img className="brand-mark" src="/icon1.svg" alt="NYPkaki" />
           <span>
             NYP<span>kaki</span>
           </span>
@@ -92,13 +86,6 @@ export function Layout() {
               <Icon name="user" />
               Profile
             </NavLink>
-            {SOON_ITEMS.map(([label, icon]) => (
-              <span className="nav-soon" key={label}>
-                <Icon name={icon} />
-                {label}
-                <i className="nav-soon-tag">Soon</i>
-              </span>
-            ))}
           </div>
         </nav>
         <div className="side-bottom">
@@ -125,7 +112,7 @@ export function Layout() {
       <main>
         <header>
           <div className="mobile-brand">
-            <img className="brand-mark" src="/icon.svg" alt="NYPkaki" />
+            <img className="brand-mark" src="/icon1.svg" alt="NYPkaki" />
             NYP<span>kaki</span>
           </div>
           <div className="header-actions">

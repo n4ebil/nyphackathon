@@ -1,22 +1,22 @@
-const nodemailer = require('nodemailer')
+const { Resend } = require('resend')
 const { defineSecret } = require('firebase-functions/params')
 
-const GMAIL_USER = defineSecret('GMAIL_USER')
-const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD')
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 
 const BRAND = { name: 'NYPkaki', orange: '#EC7211', navy: '#232F3E', ink: '#1c1a2e', muted: '#6a6684', bg: '#faf8f4' }
 const APP_URL = 'https://nypkaki.vercel.app'
+// Resend's shared sandbox sender — works with no domain setup, but until a custom
+// domain is verified in the Resend dashboard, it can only deliver to the email
+// address the Resend account itself was signed up with.
+const FROM_ADDRESS = 'NYPkaki <onboarding@resend.dev>'
 
-let cachedTransporter = null
+let cachedClient = null
 
-/** Lazily builds the SMTP transport — the secrets aren't readable until a function actually runs with them declared. */
-function getTransporter() {
-  if (cachedTransporter) return cachedTransporter
-  cachedTransporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: GMAIL_USER.value(), pass: GMAIL_APP_PASSWORD.value() },
-  })
-  return cachedTransporter
+/** Lazily builds the Resend client — the secret isn't readable until a function actually runs with it declared. */
+function getClient() {
+  if (cachedClient) return cachedClient
+  cachedClient = new Resend(RESEND_API_KEY.value())
+  return cachedClient
 }
 
 /**
@@ -30,11 +30,8 @@ function wrap(bodyHtml, { title, actionLabel, actionUrl }) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.bg};padding:32px 16px;">
     <tr><td align="center">
       <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;max-width:480px;width:100%;">
-        <tr><td style="background:${BRAND.navy};padding:20px 28px;">
-          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-            <td style="width:30px;height:30px;background:${BRAND.orange};border-radius:9px;text-align:center;vertical-align:middle;color:#fff;font-weight:800;font-size:16px;">N</td>
-            <td style="padding-left:10px;color:#ffffff;font-weight:800;font-size:17px;">NYP<span style="color:${BRAND.orange};">kaki</span></td>
-          </tr></table>
+        <tr><td style="background:${BRAND.navy};padding:16px 28px;">
+          <img src="${APP_URL}/icon1.png" width="44" height="44" alt="NYPkaki" style="display:block;border-radius:11px;" />
         </td></tr>
         <tr><td style="padding:30px 28px 8px;">
           <h1 style="margin:0 0 16px;font-size:19px;color:${BRAND.ink};">${title}</h1>
@@ -55,13 +52,8 @@ function wrap(bodyHtml, { title, actionLabel, actionUrl }) {
 
 async function send({ to, subject, html }) {
   if (!to) return
-  const transporter = getTransporter()
-  await transporter.sendMail({
-    from: `"NYPkaki" <${GMAIL_USER.value()}>`,
-    to,
-    subject,
-    html,
-  })
+  const resend = getClient()
+  await resend.emails.send({ from: FROM_ADDRESS, to, subject, html })
 }
 
 function fmtTime(t) {
@@ -163,8 +155,7 @@ async function sendClassConfirmed({ toEmail, toName, moduleName, teacherName, da
 }
 
 module.exports = {
-  GMAIL_USER,
-  GMAIL_APP_PASSWORD,
+  RESEND_API_KEY,
   sendRequestReceived,
   sendRequestSentConfirmation,
   sendClassRequestSubmitted,

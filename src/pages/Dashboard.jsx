@@ -109,10 +109,7 @@ export function Dashboard() {
         </div>
         <div className="dash-hero-actions">
           <button className="dash-cta-primary" onClick={() => navigate('/find-tutors')}>
-            ✨ Tell us what you need
-          </button>
-          <button className="dash-cta-secondary" onClick={() => navigate('/find-tutors')}>
-            Browse Tutors
+            ✨ Find a tutor
           </button>
         </div>
       </section>
@@ -266,9 +263,8 @@ export function Dashboard() {
                           )}
                           <p className="reco-meta">
                             ⭐ {stats && !stats.isNew && stats.avgRating != null ? <b>{stats.avgRating}</b> : 'New tutor'}
-                            {stats && !stats.isNew && stats.avgRating != null && ` · ${stats.sessionsCompleted} session${stats.sessionsCompleted === 1 ? '' : 's'}`}
-                            {' · '}🕐 {slot ? `${slot.day} ${slot.startTime}–${slot.endTime}` : 'no availability yet'}
                             {' · '}{formatIcon} {formatLabel}
+                            {slot && ` · ${slot.day} ${slot.startTime}`}
                           </p>
                           <button className="dash-outline-btn wide" onClick={() => navigate('/find-tutors')}>View Profile</button>
                         </article>

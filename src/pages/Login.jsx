@@ -40,7 +40,7 @@ export function Login() {
     <div className="auth-shell">
       <div className="auth-card">
         <div className="brand">
-          <img className="brand-mark" src="/icon.svg" alt="NYPkaki" />
+          <img className="brand-mark" src="/icon1.svg" alt="NYPkaki" />
           <span>
             NYP<span>kaki</span>
           </span>
