@@ -91,7 +91,16 @@ exports.onSessionCreated = onDocumentCreated({ document: 'sessions/{matchId}', s
   ])
 })
 
-// ---------------------------------------------------------------- 3. group class confirmed (Schedule page)
+// ---------------------------------------------------------------- 3. class request posted (Schedule page)
+
+exports.onClassRequestCreated = onDocumentCreated({ document: 'classRequests/{requestId}', secrets: EMAIL_SECRETS }, async (event) => {
+  const req = event.data.data()
+  const student = await getUser(req.studentId)
+  if (!student) return
+  await email.sendClassRequestSubmitted({ toEmail: student.email, toName: student.name, moduleName: req.moduleName })
+})
+
+// ---------------------------------------------------------------- 4. group class confirmed (Schedule page)
 
 exports.onClassRequestUpdated = onDocumentUpdated({ document: 'classRequests/{requestId}', secrets: EMAIL_SECRETS }, async (event) => {
   const before = event.data.before.data()
@@ -114,9 +123,11 @@ exports.onClassRequestUpdated = onDocumentUpdated({ document: 'classRequests/{re
   )
 })
 
-// ---------------------------------------------------------------- 4. reminders (scheduled)
+// ---------------------------------------------------------------- 5. reminders (scheduled)
 
-const REMINDER_WINDOW_HOURS = 24
+// 30-min job cadence means a reminder fires somewhere in the last 30-60 min before class —
+// close enough to "1 hour before" without needing a job that runs more often than this.
+const REMINDER_WINDOW_HOURS = 1
 
 exports.sendClassReminders = onSchedule({ schedule: 'every 30 minutes', secrets: EMAIL_SECRETS }, async () => {
   const now = new Date()

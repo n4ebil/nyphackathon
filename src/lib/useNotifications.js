@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   listAllClassInterests,
   listAllLearningRequests,
+  listAllSessions,
   listAllTeachingSubjects,
   listClassRequests,
   listMatchRequests,
@@ -17,14 +18,15 @@ export function useNotifications(userId) {
   async function load() {
     setLoading(true)
     try {
-      const [matchRequests, classRequests, classInterests, teachingSubjects, learningRequests] = await Promise.all([
+      const [matchRequests, classRequests, classInterests, teachingSubjects, learningRequests, sessions] = await Promise.all([
         listMatchRequests(userId),
         listClassRequests(),
         listAllClassInterests(),
         listAllTeachingSubjects(),
         listAllLearningRequests(),
+        listAllSessions(),
       ])
-      const computed = computeNotifications({ userId, matchRequests, classRequests, classInterests, teachingSubjects, learningRequests })
+      const computed = computeNotifications({ userId, matchRequests, classRequests, classInterests, teachingSubjects, learningRequests, sessions })
       const seen = getSeenIds(userId)
       setItems(computed)
       setUnseenCount(computed.filter((n) => !seen.has(n.id)).length)

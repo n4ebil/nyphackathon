@@ -138,6 +138,15 @@ async function sendSessionReminder({ toEmail, toName, otherName, moduleName, whe
   await send({ to: toEmail, subject: `Reminder: ${moduleName} with ${otherName} — ${when}`, html })
 }
 
+async function sendClassRequestSubmitted({ toEmail, toName, moduleName }) {
+  const html = wrap(
+    `<p>Hi ${toName || 'there'},</p>
+     <p>Your request for help with <b>${moduleName}</b> has been posted. Once enough classmates pile on, it's surfaced to tutors who teach it — we'll email you the moment it's confirmed.</p>`,
+    { title: 'Request posted', actionLabel: 'View your request', actionUrl: `${APP_URL}/schedule` },
+  )
+  await send({ to: toEmail, subject: `Your request for ${moduleName} has been posted`, html })
+}
+
 async function sendClassConfirmed({ toEmail, toName, moduleName, teacherName, date, startTime, endTime, location }) {
   const html = wrap(
     `<p>Hi ${toName || 'there'},</p>
@@ -158,6 +167,7 @@ module.exports = {
   GMAIL_APP_PASSWORD,
   sendRequestReceived,
   sendRequestSentConfirmation,
+  sendClassRequestSubmitted,
   sendSessionConfirmed,
   sendSessionReminder,
   sendClassConfirmed,
