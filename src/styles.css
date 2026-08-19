@@ -257,7 +257,28 @@ h1, h2, h3, p { margin-top: 0; }
 .simple-session h2 { font-size: 18px; }
 .simple-session .recommend-copy { margin-bottom: 0; }
 
-.count { background: var(--lav); color: var(--blue-dark); border-radius: 12px; padding: 3px 8px; font-size: 10.5px; font-weight: 800; }
+.count { background: var(--lav); color: var(--blue-dark); border-radius: 12px; padding: 3px 8px; font-size: 10.5px; font-weight: 800; margin-left: 8px; }
+.count.alert { background: var(--red-light); color: var(--red); }
+.stat-alert { border-color: var(--red-light); }
+.stat-alert .dash-stat-icon { background: var(--red-light); color: var(--red); }
+
+.report-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.report-card { border: 1.5px solid var(--red-light); border-radius: var(--r-md); padding: 14px 16px; background: #fffaf9; }
+.report-card.resolved { border-color: var(--line); background: var(--bg); opacity: .8; }
+.report-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.report-reason {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; color: var(--red);
+  background: var(--red-light); padding: 3px 8px; border-radius: 8px;
+}
+.report-card-head small { font-size: 11px; color: var(--muted-soft); }
+.report-card p { margin: 4px 0; font-size: 13px; }
+.report-evidence {
+  white-space: pre-wrap; font-family: inherit; font-size: 12px; color: var(--muted); background: #fff;
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; max-height: 160px; overflow-y: auto;
+}
+.report-actions { display: flex; gap: 10px; margin-top: 10px; }
+.resolved-reports { margin-top: 18px; }
+.resolved-reports summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--muted); }
 
 .mod-subheading { font-size: 13px; font-weight: 800; margin: 22px 0 0; }
 .mod-subheading:first-of-type { margin-top: 6px; }
@@ -721,6 +742,7 @@ input.plan-block-time { width: 92px; }
 .request-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .request-topics { margin-top: 14px; }
 .cancelled-note { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--red); }
+.stale-note { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--amber); }
 
 .zoom-note { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
 .zoom-link { display: flex; align-items: center; gap: 6px; color: var(--blue); font-weight: 700; text-decoration: none; }
@@ -950,6 +972,13 @@ input.plan-block-time { width: 92px; }
 .msg-thread-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .msg-thread-head b { display: block; font-size: 14px; }
 .msg-thread-head span { font-size: 11.5px; color: var(--muted); }
+.msg-report-btn {
+  margin-left: auto; font-size: 11px; font-weight: 700; color: var(--muted-soft); padding: 6px 10px;
+  border-radius: 999px; border: 1.5px solid var(--line); transition: color .15s, border-color .15s, background .15s;
+}
+.msg-report-btn:hover { color: var(--red); border-color: var(--red-light); background: var(--red-light); }
+
+.report-modal textarea { min-height: 90px; }
 
 .msg-session-strip {
   display: flex; align-items: center; gap: 7px; padding: 9px 20px; font-size: 12px; color: var(--muted);
@@ -1020,6 +1049,20 @@ input.plan-block-time { width: 92px; }
 }
 .msg-input-row button:hover:not(:disabled) { background: var(--blue-dark); }
 .msg-input-row button:disabled { opacity: .6; }
+
+/* ---------------------------------------------------------------- contact fallback */
+.contact-fallback { margin-top: 10px; }
+.contact-fallback > button {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--muted-soft);
+  transition: color .15s;
+}
+.contact-fallback > button:hover { color: var(--blue); }
+.contact-fallback-details {
+  display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; padding: 8px 12px; border-radius: 10px;
+  background: var(--bg); font-size: 11.5px; color: var(--muted);
+}
+.contact-fallback-details span { display: inline-flex; align-items: center; gap: 5px; }
+.msg-contact-fallback { padding: 0 20px; margin-top: 8px; }
 
 /* ---------------------------------------------------------------- add to calendar */
 .add-to-calendar { position: relative; display: inline-block; }

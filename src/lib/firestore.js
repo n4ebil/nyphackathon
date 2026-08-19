@@ -360,3 +360,21 @@ export async function listAllMessagesFor(userId) {
   ])
   return [...sent.docs, ...received.docs].map((d) => ({ id: d.id, ...d.data() }))
 }
+
+// ---------------------------------------------------------------- reports
+// Filed from a message thread — carries a snapshot of the recent conversation
+// as evidence, so what an admin reviews can't later be edited or deleted out
+// from under the report by either side.
+
+export async function submitReport(report) {
+  await addDoc(collection(db, 'reports'), { ...report, status: 'open', createdAt: new Date().toISOString() })
+}
+
+export async function listReports() {
+  const snap = await getDocs(collection(db, 'reports'))
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+export async function resolveReport(reportId, resolution) {
+  await updateDoc(doc(db, 'reports', reportId), { status: 'resolved', resolution, resolvedAt: new Date().toISOString() })
+}

@@ -102,5 +102,14 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.fromUserId == request.auth.uid;
       allow update: if signedIn() && resource.data.toUserId == request.auth.uid;
     }
+
+    // A report is only visible to its reporter and admins — not the reported person,
+    // and not other students. Only an admin can update it (resolve/dismiss); the
+    // reporter can't retract or edit it once filed, same reasoning as messages.
+    match /reports/{reportId} {
+      allow read: if signedIn() && (isAdmin() || resource.data.reporterId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow update: if isAdmin();
+    }
   }
 }

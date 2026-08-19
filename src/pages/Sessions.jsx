@@ -5,6 +5,7 @@ import { AppLoader } from '../components/AppLoader.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { Avatar } from '../components/Avatar.jsx'
 import { AddToCalendar } from '../components/AddToCalendar.jsx'
+import { ContactFallback } from '../components/ContactFallback.jsx'
 import { generateSessionPlan } from '../lib/ai.js'
 import {
   cancelSession,
@@ -465,6 +466,7 @@ function SessionDetailModal({ r, session, role, other, topics, onClose }) {
               }}
             />
           )}
+          <ContactFallback user={other} />
         </div>
 
         {session.plan && (

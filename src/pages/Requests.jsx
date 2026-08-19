@@ -5,6 +5,7 @@ import { Banner } from '../components/Spinner.jsx'
 import { AppLoader } from '../components/AppLoader.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { Avatar } from '../components/Avatar.jsx'
+import { ContactFallback } from '../components/ContactFallback.jsx'
 import { arrangeSession, getLearningRequest, getSessionsByMatchIds, listMatchRequests, listUsers, respondToMatchRequest } from '../lib/firestore.js'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -16,6 +17,13 @@ function scoreBand(score) {
 function formatRequestedAt(iso) {
   if (!iso) return ''
   return new Date(iso).toLocaleString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+const STALE_DAYS = 4
+
+function daysWaiting(iso) {
+  if (!iso) return 0
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
 }
 
 export function Requests() {
@@ -167,7 +175,21 @@ export function Requests() {
             </div>
           )}
           <div className="req-groups">
-          <Group title="Pending" icon="inbox" rows={pending}>
+          <Group
+            title="Pending"
+            icon="inbox"
+            rows={pending}
+            renderBelow={({ r, role }) =>
+              daysWaiting(r.createdAt) >= STALE_DAYS && (
+                <p className="recommend-copy stale-note">
+                  <Icon name="clock" size={12} />{' '}
+                  {role === 'tutor'
+                    ? "This has been waiting a while — accepting or declining lets the student know where they stand."
+                    : "Still no response after a few days — you're welcome to cancel and try another tutor instead."}
+                </p>
+              )
+            }
+          >
             {({ r, role }) => (
               <div className="request-actions">
                 {role === 'tutor' ? (
@@ -189,17 +211,20 @@ export function Requests() {
             title="Accepted"
             icon="check"
             rows={accepted}
-            renderBelow={({ r, session }) =>
-              (session?.status === 'cancelled' || arrangingId === r.matchId) && (
-                <ArrangeForm
-                  matchId={r.matchId}
-                  busy={busyId === r.matchId}
-                  onArrange={arrange}
-                  onCancel={session?.status === 'cancelled' ? undefined : () => setArrangingId(null)}
-                  relabel={session?.status === 'cancelled' ? 'Re-arrange session' : undefined}
-                />
-              )
-            }
+            renderBelow={({ r, other, session }) => (
+              <>
+                {(session?.status === 'cancelled' || arrangingId === r.matchId) && (
+                  <ArrangeForm
+                    matchId={r.matchId}
+                    busy={busyId === r.matchId}
+                    onArrange={arrange}
+                    onCancel={session?.status === 'cancelled' ? undefined : () => setArrangingId(null)}
+                    relabel={session?.status === 'cancelled' ? 'Re-arrange session' : undefined}
+                  />
+                )}
+                <ContactFallback user={other} />
+              </>
+            )}
           >
             {({ r, session }) => {
               if (session?.status === 'arranged') {
@@ -255,7 +280,10 @@ export function Requests() {
                   <Avatar name={other?.name || other?.email} id={other?.userId} small />
                   <div>
                     <b>{r.moduleName}</b>
-                    <small>{role === 'tutor' ? 'From' : 'To'} {other.name || other.email} · Requested {formatRequestedAt(r.createdAt)}</small>
+                    <small>
+                      {role === 'tutor' ? 'From' : 'To'} {other.name || other.email} · Requested {formatRequestedAt(r.createdAt)}
+                      {r.status === 'pending' && daysWaiting(r.createdAt) >= 1 && ` · waiting ${daysWaiting(r.createdAt)}d`}
+                    </small>
                   </div>
                 </div>
                 <div className="request-meta">

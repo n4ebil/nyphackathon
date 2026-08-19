@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/Avatar.jsx'
+import { ContactFallback } from '../components/ContactFallback.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { AppLoader } from '../components/AppLoader.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
@@ -14,10 +15,18 @@ import {
   listUsers,
   respondToProposal,
   sendMessage,
+  submitReport,
 } from '../lib/firestore.js'
 
 const POLL_MS = 4000
 const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const REPORT_REASONS = [
+  ['spam', 'Spam or advertising'],
+  ['harassment', 'Harassment or abuse'],
+  ['inappropriate', 'Inappropriate content'],
+  ['scam', 'Scam or impersonation'],
+  ['other', 'Other'],
+]
 const DAYS = DAY_ORDER
 
 function proposalSummary(p) {
@@ -182,7 +191,7 @@ export function Messages() {
           </div>
 
           {active ? (
-            <Thread key={active.otherId} otherId={active.otherId} other={active.other} matches={active.matches} myId={user.userId} onSessionChanged={load} />
+            <Thread key={active.otherId} otherId={active.otherId} other={active.other} matches={active.matches} myId={user.userId} myName={user.name || user.email} onSessionChanged={load} />
           ) : (
             <div className="msg-thread msg-thread-empty">
               <p className="recommend-copy">Select a conversation to view it.</p>
@@ -194,7 +203,7 @@ export function Messages() {
   )
 }
 
-function Thread({ otherId, other, matches, myId, onSessionChanged }) {
+function Thread({ otherId, other, matches, myId, myName, onSessionChanged }) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
@@ -202,6 +211,8 @@ function Thread({ otherId, other, matches, myId, onSessionChanged }) {
   const [error, setError] = useState('')
   const [proposing, setProposing] = useState(false)
   const [respondingId, setRespondingId] = useState(null)
+  const [reporting, setReporting] = useState(false)
+  const [reportSent, setReportSent] = useState(false)
   const bottomRef = useRef(null)
 
   const matchesById = useMemo(() => Object.fromEntries(matches.map((m) => [m.matchId, m])), [matches])
@@ -246,6 +257,32 @@ function Thread({ otherId, other, matches, myId, onSessionChanged }) {
       await load(true)
     } catch (err) {
       setError(err.message || 'Could not send that message.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  async function onReport({ reason, details }) {
+    setSending(true)
+    setError('')
+    try {
+      // Last 10 messages, in order — evidence as the admin will actually see it, not just the one that
+      // prompted the report, since context (who said what, in what order) usually matters more than one line.
+      const evidence = messages.slice(-10).map((m) => `${m.fromUserId === myId ? 'Me' : (other.name || other.email)}: ${m.text}`).join('\n')
+      await submitReport({
+        reporterId: myId,
+        reporterName: myName,
+        reportedUserId: otherId,
+        reportedName: other.name || other.email,
+        matchId: defaultMatchId,
+        reason,
+        details,
+        evidence: evidence || '(no messages in this conversation yet)',
+      })
+      setReporting(false)
+      setReportSent(true)
+    } catch (err) {
+      setError(err.message || 'Could not submit that report.')
     } finally {
       setSending(false)
     }
@@ -313,7 +350,24 @@ function Thread({ otherId, other, matches, myId, onSessionChanged }) {
           <b>{other.name || other.email}</b>
           <span>{matches.length > 1 ? `${matches.length} modules together` : matches[0]?.moduleName}</span>
         </div>
+        <button type="button" className="msg-report-btn" onClick={() => setReporting(true)} title="Report this conversation">
+          Report
+        </button>
       </div>
+
+      {reporting && (
+        <ReportModal
+          otherName={other.name || other.email}
+          busy={sending}
+          onCancel={() => setReporting(false)}
+          onSubmit={onReport}
+        />
+      )}
+      {reportSent && (
+        <div className="msg-session-strip">
+          <Icon name="check" size={13} /> <span>Report submitted — an admin will review it.</span>
+        </div>
+      )}
 
       {!loading && (
         <div className={'msg-session-strip' + (next ? ' arranged' : '')}>
@@ -331,6 +385,8 @@ function Thread({ otherId, other, matches, myId, onSessionChanged }) {
           )}
         </div>
       )}
+
+      {!loading && <ContactFallback user={other} className="msg-contact-fallback" />}
 
       {error && <Banner kind="error">{error}</Banner>}
 
@@ -467,6 +523,41 @@ function ProposeForm({ initial, busy, onCancel, onSubmit }) {
         >
           {busy ? <Spinner /> : 'Send proposal'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function ReportModal({ otherName, busy, onCancel, onSubmit }) {
+  const [reason, setReason] = useState(REPORT_REASONS[0][0])
+  const [details, setDetails] = useState('')
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal-panel report-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onCancel}><Icon name="x" size={16} /></button>
+        <p className="eyebrow">REPORT</p>
+        <h2>Report {otherName}</h2>
+        <p className="recommend-copy">
+          The last 10 messages in this conversation are attached automatically as evidence. An admin will review
+          this and can act on it — including locking the account — right away.
+        </p>
+        <label className="field">
+          Reason
+          <select value={reason} onChange={(e) => setReason(e.target.value)}>
+            {REPORT_REASONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          What happened? <span className="field-optional">(optional)</span>
+          <textarea placeholder="Any extra context that would help an admin review this…" value={details} onChange={(e) => setDetails(e.target.value)} />
+        </label>
+        <div className="arrange-actions">
+          <button className="outline" disabled={busy} onClick={onCancel}>Cancel</button>
+          <button className="card-btn inline danger-btn" disabled={busy} onClick={() => onSubmit({ reason, details })}>
+            {busy ? <Spinner /> : 'Submit report'}
+          </button>
+        </div>
       </div>
     </div>
   )

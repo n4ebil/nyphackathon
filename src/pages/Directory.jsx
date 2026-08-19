@@ -16,13 +16,23 @@ import {
   listAllTeachingSubjects,
   listClassRequests,
   listDirectory,
+  listReports,
   listUsers,
   removeAdminEmail,
+  resolveReport,
   upsertUserProfile,
 } from '../lib/firestore.js'
 import { parseStudentDirectory } from '../lib/csv.js'
 import { ADMIN_EMAILS } from '../lib/admin.js'
 import { NYP_COURSE_CATALOG, schoolsForCourse } from '../shared/nyp.ts'
+
+const REPORT_REASON_LABELS = {
+  spam: 'Spam or advertising',
+  harassment: 'Harassment or abuse',
+  inappropriate: 'Inappropriate content',
+  scam: 'Scam or impersonation',
+  other: 'Other',
+}
 
 export function Directory() {
   const { user } = useAuth()
@@ -58,6 +68,10 @@ export function Directory() {
   const [newAdminEmail, setNewAdminEmail] = useState('')
   const [addingAdmin, setAddingAdmin] = useState(false)
   const [removingAdmin, setRemovingAdmin] = useState(null)
+
+  const [reports, setReports] = useState([])
+  const [loadingReports, setLoadingReports] = useState(true)
+  const [reportBusyId, setReportBusyId] = useState(null)
 
   async function loadExisting() {
     setLoadingExisting(true)
@@ -112,11 +126,24 @@ export function Directory() {
     }
   }
 
+  async function loadReports() {
+    setLoadingReports(true)
+    try {
+      const all = await listReports()
+      setReports(all.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoadingReports(false)
+    }
+  }
+
   useEffect(() => {
     loadExisting()
     loadStudents()
     loadOverview()
     loadAdminEmails()
+    loadReports()
   }, [])
 
   const stats = useMemo(
@@ -126,9 +153,12 @@ export function Directory() {
       upcomingSessions: sessions.filter((s) => s.status === 'arranged').length,
       pendingRequests: matchRequests.filter((r) => r.status === 'pending').length,
       openClassRequests: classRequests.filter((r) => r.status !== 'scheduled').length,
+      openReports: reports.filter((r) => r.status !== 'resolved').length,
     }),
-    [students, subjects, sessions, matchRequests, classRequests],
+    [students, subjects, sessions, matchRequests, classRequests, reports],
   )
+  const openReports = reports.filter((r) => r.status !== 'resolved')
+  const resolvedReports = reports.filter((r) => r.status === 'resolved')
   const loadingStats = loadingStudents || loadingOverview
 
   const usersById = useMemo(() => Object.fromEntries(students.map((s) => [s.userId, s])), [students])
@@ -187,6 +217,35 @@ export function Directory() {
       setError(err.message)
     } finally {
       setModerationBusyId(null)
+    }
+  }
+
+  async function lockReportedAccount(report) {
+    if (!confirm(`Lock ${report.reportedName}'s account? They'll be signed out immediately and can't log back in until unlocked.`)) return
+    setReportBusyId(report.id)
+    setError('')
+    try {
+      await upsertUserProfile(report.reportedUserId, { locked: true })
+      await resolveReport(report.id, 'locked_account')
+      setStudents((prev) => prev.map((s) => (s.userId === report.reportedUserId ? { ...s, locked: true } : s)))
+      setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, status: 'resolved', resolution: 'locked_account' } : r)))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setReportBusyId(null)
+    }
+  }
+
+  async function dismissReport(report) {
+    setReportBusyId(report.id)
+    setError('')
+    try {
+      await resolveReport(report.id, 'dismissed')
+      setReports((prev) => prev.map((r) => (r.id === report.id ? { ...r, status: 'resolved', resolution: 'dismissed' } : r)))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setReportBusyId(null)
     }
   }
 
@@ -410,11 +469,72 @@ export function Directory() {
               <span>Open class requests</span>
             </div>
           </div>
+          <div className={'dash-stat' + (stats.openReports > 0 ? ' stat-alert' : '')}>
+            <div className="dash-stat-icon"><Icon name="x" size={16} /></div>
+            <div>
+              <b>{stats.openReports}</b>
+              <span>Open reports</span>
+            </div>
+          </div>
         </div>
       )}
 
       {error && <Banner kind="error">{error}</Banner>}
       {success && <Banner kind="info">{success}</Banner>}
+
+      <div className="card">
+        <h2>Reports {openReports.length > 0 && <span className="count alert">{openReports.length} open</span>}</h2>
+        <p className="recommend-copy">
+          Filed from a message thread — each carries a snapshot of the recent conversation as evidence.
+        </p>
+
+        {loadingReports ? (
+          <Spinner />
+        ) : openReports.length === 0 ? (
+          <p className="recommend-copy">No open reports.</p>
+        ) : (
+          <div className="report-list">
+            {openReports.map((r) => (
+              <div key={r.id} className="report-card">
+                <div className="report-card-head">
+                  <span className="report-reason">{REPORT_REASON_LABELS[r.reason] || r.reason}</span>
+                  <small>{new Date(r.createdAt).toLocaleString('en-SG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>
+                </div>
+                <p>
+                  <b>{r.reporterName}</b> reported <b>{r.reportedName}</b>
+                </p>
+                {r.details && <p className="recommend-copy">"{r.details}"</p>}
+                <pre className="report-evidence">{r.evidence}</pre>
+                <div className="report-actions">
+                  <button className="outline" disabled={reportBusyId === r.id} onClick={() => dismissReport(r)}>
+                    Dismiss
+                  </button>
+                  <button className="card-btn inline danger-btn" disabled={reportBusyId === r.id} onClick={() => lockReportedAccount(r)}>
+                    {reportBusyId === r.id ? <Spinner /> : 'Lock reported account'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {resolvedReports.length > 0 && (
+          <details className="resolved-reports">
+            <summary>{resolvedReports.length} resolved</summary>
+            <div className="report-list">
+              {resolvedReports.map((r) => (
+                <div key={r.id} className="report-card resolved">
+                  <div className="report-card-head">
+                    <span className="report-reason">{REPORT_REASON_LABELS[r.reason] || r.reason}</span>
+                    <small>{r.resolution === 'locked_account' ? 'Account locked' : 'Dismissed'}</small>
+                  </div>
+                  <p><b>{r.reporterName}</b> reported <b>{r.reportedName}</b></p>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
 
       <div className="card">
         <h2>Admins</h2>
