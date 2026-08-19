@@ -1,36 +1,13 @@
 'use strict'
 
-/**
- * Single Lambda behind one HTTP API Gateway, fanning out on method + path.
- * One function instead of five keeps the Learner Lab setup (which only
- * allows using the pre-existing LabRole, not creating custom IAM roles) to
- * a single `aws lambda create-function` call — see ../deploy.sh.
- *
- * Deliberately uses only `@aws-sdk/client-dynamodb` (the low-level client),
- * NOT `@aws-sdk/lib-dynamodb` (the higher-level DocumentClient). The Node.js
- * 18.x/20.x Lambda runtime bundles AWS SDK v3's per-service clients, but
- * `lib-dynamodb` is not guaranteed to be included — and this project has no
- * npm/build step available on the Learner Lab terminal to vendor it into the
- * zip. Attribute values are marshalled/unmarshalled by hand instead; every
- * item stored here is a flat string/number map, so this stays simple.
- *
- * Routes:
- *   POST   /compute-matches         -> run the scoring engine (matching.js), no DB write
- *   POST   /match-requests          -> create a match request (mirrors firestore.js#sendMatchRequest)
- *   GET    /match-requests?userId=  -> { incoming, outgoing } for that user (mirrors #listMatchRequests)
- *   GET    /match-requests          -> every match request (mirrors #listAllMatchRequests)
- *   PATCH  /match-requests/{matchId}-> update status (mirrors #respondToMatchRequest)
- *
- * Data: one DynamoDB table (TABLE_NAME env var), partition key `matchId`,
- * with two GSIs (tutorId-index, studentId-index) so "requests sent to me" /
- * "requests I sent" can each be a Query instead of a full Scan.
- */
-
 const { DynamoDBClient, PutItemCommand, ScanCommand, QueryCommand, UpdateItemCommand } = require('@aws-sdk/client-dynamodb')
+const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns')
 const { findMatches, buildExplanation } = require('./matching.js')
 
 const client = new DynamoDBClient({})
+const sns = new SNSClient({})
 const TABLE_NAME = process.env.TABLE_NAME || 'TutoringMatchRequests'
+const TOPIC_ARN = process.env.TOPIC_ARN || ''
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -42,7 +19,6 @@ function respond(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }, body: JSON.stringify(body) }
 }
 
-/** Flat JS object -> DynamoDB AttributeValue map. Only handles string/number/boolean/null — everything this table stores. */
 function marshal(item) {
   const out = {}
   for (const [key, value] of Object.entries(item)) {
@@ -55,7 +31,6 @@ function marshal(item) {
   return out
 }
 
-/** DynamoDB AttributeValue map -> flat JS object. */
 function unmarshal(av) {
   const out = {}
   for (const [key, value] of Object.entries(av || {})) {
@@ -86,7 +61,6 @@ exports.handler = async (event) => {
   }
 }
 
-/** Runs the deterministic scoring engine against caller-supplied data — no DB access, pure compute. */
 async function handleComputeMatches(event) {
   const input = JSON.parse(event.body || '{}')
   const required = ['student', 'request', 'studentSlots', 'candidates', 'teachingSubjects', 'availability']
@@ -105,6 +79,26 @@ async function handleCreateMatchRequest(event) {
     return respond(400, { error: 'matchId, studentId and tutorId are required' })
   }
   await client.send(new PutItemCommand({ TableName: TABLE_NAME, Item: marshal(matchRequest) }))
+
+  if (TOPIC_ARN) {
+    try {
+      await sns.send(
+        new PublishCommand({
+          TopicArn: TOPIC_ARN,
+          Subject: 'New tutoring match request',
+          Message: `A new match request was sent for "${matchRequest.moduleName || 'a module'}".
+
+From student: ${matchRequest.studentId}
+To tutor: ${matchRequest.tutorId}
+Message: ${matchRequest.message || '(none)'}
+Status: ${matchRequest.status}`,
+        }),
+      )
+    } catch (err) {
+      console.error('SNS publish failed (non-fatal)', err)
+    }
+  }
+
   return respond(200, matchRequest)
 }
 
