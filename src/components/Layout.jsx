@@ -6,17 +6,12 @@ import { Avatar } from './Avatar.jsx'
 import { NotificationBell } from './NotificationBell.jsx'
 import { listMatchRequests } from '../lib/firestore.js'
 
-const NAV_GROUPS = [
-  ['Learn', [
-    ['/dashboard', 'Home', 'home'],
-    ['/find-tutors', 'Find Tutors', 'search'],
-    ['/schedule', 'Schedule', 'book'],
-  ]],
-  ['Connect', [
-    ['/requests', 'Requests', 'inbox'],
-    ['/sessions', 'Sessions', 'calendar'],
-    ['/messages', 'Messages', 'message'],
-  ]],
+const NAV_ITEMS = [
+  ['/dashboard', 'Home', 'home'],
+  ['/find-tutors', 'Find Tutors', 'search'],
+  ['/requests', 'Requests', 'inbox'],
+  ['/sessions', 'Sessions', 'calendar'],
+  ['/messages', 'Messages', 'message'],
 ]
 
 const MOBILE_NAV = [
@@ -57,36 +52,24 @@ export function Layout() {
           </span>
         </div>
         <nav>
-          {NAV_GROUPS.map(([heading, items]) => (
-            <div className="nav-group" key={heading}>
-              <p className="nav-heading">{heading}</p>
-              {items.map(([to, label, icon]) => (
-                <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
-                  <Icon name={icon} />
-                  {label}
-                  {badges[to] > 0 && <i className="nav-badge">{badges[to] > 9 ? '9+' : badges[to]}</i>}
-                </NavLink>
-              ))}
-            </div>
-          ))}
+          <div className="nav-group">
+            {NAV_ITEMS.map(([to, label, icon]) => (
+              <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}>
+                <Icon name={icon} />
+                {label}
+                {badges[to] > 0 && <i className="nav-badge">{badges[to] > 9 ? '9+' : badges[to]}</i>}
+              </NavLink>
+            ))}
+          </div>
 
           {isAdmin && (
             <div className="nav-group">
-              <p className="nav-heading">Admin</p>
-              <NavLink to="/admin/directory" className={({ isActive }) => (isActive ? 'active' : '')}>
+              <NavLink to="/admin/directory" className={({ isActive }) => 'nav-admin' + (isActive ? ' active' : '')}>
                 <Icon name="user" />
                 Admin Page
               </NavLink>
             </div>
           )}
-
-          <div className="nav-group">
-            <p className="nav-heading">Me</p>
-            <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <Icon name="user" />
-              Profile
-            </NavLink>
-          </div>
         </nav>
         <div className="side-bottom">
           <button className="tutor-mode" onClick={() => navigate('/profile#teaching')}>

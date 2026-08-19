@@ -419,7 +419,7 @@ export function Directory() {
     <>
       <div className="intro">
         <div>
-          <p className="eyebrow">ADMIN</p>
+          <p className="eyebrow admin-eyebrow">ADMIN</p>
           <h1>Admin Page</h1>
           <p className="sub">Import a roster once, and registration auto-fills name + course by admin number.</p>
         </div>

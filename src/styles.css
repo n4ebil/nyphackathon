@@ -125,9 +125,9 @@ header {
 }
 
 /* ---------------------------------------------------------------- nav (light sidebar) */
-nav { margin-top: 6px; display: flex; flex-direction: column; gap: 18px; }
+nav { margin-top: 6px; display: flex; flex-direction: column; gap: 14px; }
 .nav-group { display: grid; gap: 1px; }
-.nav-heading { margin: 0 12px 6px; color: var(--muted-soft); font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+.nav-group + .nav-group { padding-top: 14px; border-top: 1px solid var(--line); }
 nav button, nav a {
   position: relative; display: flex; align-items: center; gap: 11px;
   padding: 9px 12px; border-radius: var(--r-sm);
@@ -139,6 +139,12 @@ nav button.active, nav a.active { background: var(--lav); color: var(--blue-dark
 nav a.active::before { content: none; }
 nav button:hover, nav a:hover { background: var(--bg); color: var(--ink); }
 nav a.active:hover { color: var(--blue-dark); }
+
+/* Admin is a distinct, deliberately careful area — a red accent instead of the app's usual blue signals that. */
+nav a.nav-admin { color: var(--red); }
+nav a.nav-admin:hover { background: var(--red-light); color: var(--red); }
+nav a.nav-admin.active { background: var(--red-light); color: var(--red); font-weight: 600; }
+nav a.nav-admin.active:hover { color: var(--red); }
 
 .nav-badge {
   margin-left: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
@@ -183,6 +189,7 @@ nav a.active .nav-badge { background: var(--blue); }
 
 /* ---------------------------------------------------------------- typography */
 .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .5px; color: var(--label); margin: 0 0 6px; text-transform: uppercase; }
+.admin-eyebrow { color: var(--red); }
 h1, h2, h3, p { margin-top: 0; }
 .intro h1 { font-family: 'Instrument Sans', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: -0.02em; margin: 0 0 6px; }
 .intro h1 span { font-size: 23px; }
