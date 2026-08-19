@@ -131,26 +131,20 @@ export async function getLearningRequest(requestId) {
 }
 
 // ---------------------------------------------------------------- match requests
-// Backed by AWS (API Gateway -> Lambda -> DynamoDB) when VITE_API_BASE_URL is
-// set; falls back to Firestore otherwise so local dev / a not-yet-deployed
-// Lambda never breaks the app. See src/lib/awsApi.js.
-
-import {
-isAwsConfigured,
-sendMatchRequestRemote,
-listMatchRequestsRemote,
-listAllMatchRequestsRemote,
-respondToMatchRequestRemote,
-} from './awsApi.js'
+// NOTE: Temporarily reverted to Firestore-only (not routed through AWS) so that
+// the onMatchRequestCreated Cloud Function (email to both tutor and student on
+// request-sent) fires correctly ahead of the live demo. The AWS-backed remote
+// functions in src/lib/awsApi.js are still deployed and working (compute-matches
+// still uses them, see src/lib/match.js) — only the match-request read/write
+// path was reverted here. Re-enable by restoring the isAwsConfigured checks
+// below once request-sent emails are wired up on the AWS side (SES).
 
 /** matchId (from findMatches, `${requestId}--${tutorId}`) is used as the doc id / partition key so a match can only be requested once. */
 export async function sendMatchRequest(matchRequest) {
-if (isAwsConfigured) return sendMatchRequestRemote(matchRequest)
 await setDoc(doc(db, 'matchRequests', matchRequest.matchId), matchRequest)
 }
 
 export async function listMatchRequests(userId) {
-if (isAwsConfigured) return listMatchRequestsRemote(userId)
 const [incoming, outgoing] = await Promise.all([
 getDocs(query(collection(db, 'matchRequests'), where('tutorId', '==', userId))),
 getDocs(query(collection(db, 'matchRequests'), where('studentId', '==', userId))),
@@ -162,12 +156,10 @@ outgoing: outgoing.docs.map((d) => d.data()),
 }
 
 export async function respondToMatchRequest(matchId, status) {
-if (isAwsConfigured) return respondToMatchRequestRemote(matchId, status)
 await updateDoc(doc(db, 'matchRequests', matchId), { status })
 }
 
 export async function listAllMatchRequests() {
-if (isAwsConfigured) return listAllMatchRequestsRemote()
 const snap = await getDocs(collection(db, 'matchRequests'))
 return snap.docs.map((d) => d.data())
 }
