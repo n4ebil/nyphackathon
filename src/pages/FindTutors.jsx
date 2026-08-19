@@ -826,8 +826,6 @@ function TutorCard({ match, topics, slots, sent, busy, onSend, onViewProfile, on
         </div>
       </div>
 
-      {band === 'possible' || band === 'low' ? <span className="partial-badge">Partial match</span> : null}
-
       <div className="tutor-stats-row">
         <span className={stats && !stats.isNew && stats.avgRating != null ? 'tstat rating' : 'tstat rating new'}>
           <Icon name="star" size={13} />

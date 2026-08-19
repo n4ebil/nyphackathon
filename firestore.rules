@@ -93,5 +93,14 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
+
+    // One conversation per matchId (same key sessions/plans use). Update is only
+    // for the recipient to accept/decline a reschedule proposal attached to a
+    // message — everything else about a message is immutable once sent.
+    match /messages/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.fromUserId == request.auth.uid;
+      allow update: if signedIn() && resource.data.toUserId == request.auth.uid;
+    }
   }
 }

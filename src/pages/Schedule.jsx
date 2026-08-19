@@ -269,9 +269,10 @@ export function Schedule() {
 
                   {attendees.length > 0 && (
                     <div className="chips">
-                      {attendees.map((a) => (
+                      {attendees.slice(0, 6).map((a) => (
                         <span key={a.userId}>{a.userName}</span>
                       ))}
+                      {attendees.length > 6 && <span>+{attendees.length - 6} more</span>}
                     </div>
                   )}
 
@@ -319,7 +320,6 @@ export function Schedule() {
                     </div>
                   ) : (
                     <div className="match-card-actions">
-                      <span className="view-tutors">{attendees.length} {isScheduled ? 'coming' : 'interested'}</span>
                       {isAssignedTeacher ? (
                         <span className="sent-tag">
                           <Icon name="check" size={14} /> You're hosting

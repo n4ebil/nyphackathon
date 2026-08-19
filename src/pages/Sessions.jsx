@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
-import { Banner } from '../components/Spinner.jsx'
+import { Banner, Spinner } from '../components/Spinner.jsx'
 import { AppLoader } from '../components/AppLoader.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { Avatar } from '../components/Avatar.jsx'
@@ -8,6 +8,7 @@ import { generateSessionPlan } from '../lib/ai.js'
 import {
   cancelSession,
   completeSession,
+  editSession,
   getLearningRequest,
   getSessionsByMatchIds,
   listAllFeedback,
@@ -16,6 +17,8 @@ import {
   saveSessionPlan,
   submitFeedback,
 } from '../lib/firestore.js'
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 function scoreBand(score) {
   return score >= 80 ? 'excellent' : score >= 60 ? 'good' : score >= 40 ? 'possible' : 'low'
@@ -29,6 +32,8 @@ export function Sessions() {
   const [feedback, setFeedback] = useState([])
   const [busyId, setBusyId] = useState(null)
   const [detailRow, setDetailRow] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [search, setSearch] = useState('')
 
   async function load() {
     setLoading(true)
@@ -97,6 +102,19 @@ export function Sessions() {
     }
   }
 
+  async function edit(matchId, details) {
+    setBusyId(matchId)
+    try {
+      await editSession(matchId, details)
+      setEditingId(null)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function leaveFeedback(matchId, toUser, { rating, helpful, comment }) {
     setBusyId(matchId)
     try {
@@ -130,9 +148,13 @@ export function Sessions() {
   }
 
   const feedbackFrom = (matchId, fromUser) => feedback.find((f) => f.sessionId === matchId && f.fromUser === fromUser)
-  const upcoming = rows.filter((row) => row.session.status === 'arranged')
-  const completed = rows.filter((row) => row.session.status === 'completed')
-  const cancelled = rows.filter((row) => row.session.status === 'cancelled')
+  const q = search.trim().toLowerCase()
+  const searched = q
+    ? rows.filter(({ r, other }) => (r.moduleName || '').toLowerCase().includes(q) || (other.name || other.email || '').toLowerCase().includes(q))
+    : rows
+  const upcoming = searched.filter((row) => row.session.status === 'arranged')
+  const completed = searched.filter((row) => row.session.status === 'completed')
+  const cancelled = searched.filter((row) => row.session.status === 'cancelled')
 
   return (
     <>
@@ -154,7 +176,23 @@ export function Sessions() {
           <p>No sessions yet. Once a tutoring request is accepted and arranged, it'll show up here.</p>
         </div>
       ) : (
-        <div className="req-groups">
+        <>
+          {rows.length > 6 && (
+            <label className="field req-search">
+              Search by person or module
+              <div className="search-input">
+                <Icon name="search" size={15} />
+                <input placeholder="e.g. Chloe or Databases…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+            </label>
+          )}
+          {q && searched.length === 0 && (
+            <div className="empty-state">
+              <span className="empty-icon">🔍</span>
+              <p>No sessions match "{search}".</p>
+            </div>
+          )}
+          <div className="req-groups">
           <SessionGroup
             title="Upcoming"
             icon="clock"
@@ -164,6 +202,9 @@ export function Sessions() {
             onCancel={cancel}
             onSavePlan={savePlan}
             onView={setDetailRow}
+            editingId={editingId}
+            onStartEdit={setEditingId}
+            onEdit={edit}
           />
           <SessionGroup
             title="Completed"
@@ -185,7 +226,8 @@ export function Sessions() {
             collapsedByDefault
             cancelledGroup
           />
-        </div>
+          </div>
+        </>
       )}
 
       {detailRow && <SessionDetailModal {...detailRow} onClose={() => setDetailRow(null)} />}
@@ -193,7 +235,7 @@ export function Sessions() {
   )
 }
 
-function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSavePlan, onFeedback, feedbackFrom, myId, onView, completedGroup, cancelledGroup, collapsedByDefault }) {
+function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSavePlan, onFeedback, feedbackFrom, myId, onView, completedGroup, cancelledGroup, collapsedByDefault, editingId, onStartEdit, onEdit }) {
   const [open, setOpen] = useState(!collapsedByDefault)
   if (!rows.length) return null
   return (
@@ -209,6 +251,7 @@ function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSaveP
       ) : (
         rows.map((row) => {
           const { r, session, role, other, topics } = row
+          const isEditing = editingId === r.matchId
           return (
             <div className="request-card" key={r.matchId}>
               <div className="request-mini">
@@ -222,18 +265,33 @@ function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSaveP
                     </small>
                   </div>
                 </div>
-                <div className="request-actions">
-                  <button className="outline" onClick={() => onView(row)}>View Session</button>
-                  {!completedGroup && !cancelledGroup && (
-                    <>
-                      <button className="outline danger-btn" disabled={busyId === r.matchId} onClick={() => onCancel(r.matchId)}>Cancel</button>
-                      <button disabled={busyId === r.matchId} onClick={() => onComplete(r.matchId)}>Mark Completed</button>
-                    </>
-                  )}
-                </div>
+                {!isEditing && (
+                  <div className="request-actions">
+                    <button className="outline" onClick={() => onView(row)}>View Session</button>
+                    {!completedGroup && !cancelledGroup && (
+                      <>
+                        <button className="outline" disabled={busyId === r.matchId} onClick={() => onStartEdit(r.matchId)}>
+                          <Icon name="edit" size={13} /> Edit
+                        </button>
+                        <button className="outline danger-btn" disabled={busyId === r.matchId} onClick={() => onCancel(r.matchId)}>Cancel</button>
+                        <button disabled={busyId === r.matchId} onClick={() => onComplete(r.matchId)}>Mark Completed</button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {!completedGroup && !cancelledGroup && session.format === 'online' && (
+              {isEditing && (
+                <EditSessionForm
+                  matchId={r.matchId}
+                  session={session}
+                  busy={busyId === r.matchId}
+                  onSave={onEdit}
+                  onCancel={() => onStartEdit(null)}
+                />
+              )}
+
+              {!completedGroup && !cancelledGroup && !isEditing && session.format === 'online' && (
                 <p className="recommend-copy zoom-note">
                   {session.zoomLink ? (
                     <a href={session.zoomLink} target="_blank" rel="noreferrer" className="zoom-link">
@@ -251,7 +309,7 @@ function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSaveP
                 </div>
               )}
 
-              {!completedGroup && !cancelledGroup && (
+              {!completedGroup && !cancelledGroup && !isEditing && (
                 <SessionPlanPanel matchId={r.matchId} r={r} session={session} role={role} busy={busyId === r.matchId} onSave={onSavePlan} />
               )}
               {completedGroup && session.plan && <PlanReadOnly plan={session.plan} />}
@@ -263,6 +321,65 @@ function SessionGroup({ title, icon, rows, busyId, onComplete, onCancel, onSaveP
           )
         })
       )}
+    </div>
+  )
+}
+
+function EditSessionForm({ matchId, session, busy, onSave, onCancel }) {
+  const [day, setDay] = useState(session.day)
+  const [startTime, setStartTime] = useState(session.startTime)
+  const [endTime, setEndTime] = useState(session.endTime)
+  const [format, setFormat] = useState(session.format)
+  const [location, setLocation] = useState(session.format === 'online' ? '' : session.location)
+
+  return (
+    <div className="arrange-form">
+      <div className="arrange-grid">
+        <label className="field">
+          Day
+          <select value={day} onChange={(e) => setDay(e.target.value)}>
+            {DAYS.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          Start
+          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        </label>
+        <label className="field">
+          End
+          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+        </label>
+        <label className="field">
+          Format
+          <select value={format} onChange={(e) => setFormat(e.target.value)}>
+            <option value="in-person">In-person</option>
+            <option value="online">Online</option>
+          </select>
+        </label>
+        <label className="field arrange-location">
+          {format === 'online' ? 'Notes (optional)' : 'Location'}
+          <input
+            placeholder={format === 'online' ? 'e.g. Same Zoom link as before' : 'e.g. Campus library'}
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          />
+        </label>
+      </div>
+      {format === 'online' && session.format !== 'online' && (
+        <p className="recommend-copy arrange-zoom-hint">
+          Switching to online here doesn't generate a new Zoom link automatically — that only happens when a session
+          is first arranged. Share a link manually, or note it above.
+        </p>
+      )}
+      <div className="arrange-actions">
+        <button className="outline" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button
+          disabled={busy || endTime <= startTime}
+          onClick={() => onSave(matchId, { day, startTime, endTime, format, location: location || (format === 'online' ? 'Online' : 'Campus library') })}
+        >
+          {busy ? <Spinner /> : 'Save changes'}
+        </button>
+      </div>
     </div>
   )
 }

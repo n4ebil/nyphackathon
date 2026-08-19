@@ -25,6 +25,7 @@ export function Requests() {
   const [rows, setRows] = useState([])
   const [busyId, setBusyId] = useState(null)
   const [arrangingId, setArrangingId] = useState(null)
+  const [search, setSearch] = useState('')
 
   async function load() {
     setLoading(true)
@@ -92,10 +93,15 @@ export function Requests() {
     }
   }
 
-  const pending = rows.filter(({ r }) => r.status === 'pending')
-  const accepted = rows.filter(({ r, session }) => r.status === 'accepted' && (!session || session.status === 'arranged' || session.status === 'cancelled'))
-  const completed = rows.filter(({ r, session }) => r.status === 'accepted' && session?.status === 'completed')
-  const declined = rows.filter(({ r }) => r.status === 'rejected')
+  const q = search.trim().toLowerCase()
+  const searched = q
+    ? rows.filter(({ r, other }) => (r.moduleName || '').toLowerCase().includes(q) || (other.name || other.email || '').toLowerCase().includes(q))
+    : rows
+
+  const pending = searched.filter(({ r }) => r.status === 'pending')
+  const accepted = searched.filter(({ r, session }) => r.status === 'accepted' && (!session || session.status === 'arranged' || session.status === 'cancelled'))
+  const completed = searched.filter(({ r, session }) => r.status === 'accepted' && session?.status === 'completed')
+  const declined = searched.filter(({ r }) => r.status === 'rejected')
 
   return (
     <>
@@ -119,7 +125,23 @@ export function Requests() {
           </p>
         </div>
       ) : (
-        <div className="req-groups">
+        <>
+          {rows.length > 6 && (
+            <label className="field req-search">
+              Search by person or module
+              <div className="search-input">
+                <Icon name="search" size={15} />
+                <input placeholder="e.g. Chloe or Databases…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+            </label>
+          )}
+          {q && searched.length === 0 && (
+            <div className="empty-state">
+              <span className="empty-icon">🔍</span>
+              <p>No requests match "{search}".</p>
+            </div>
+          )}
+          <div className="req-groups">
           <Group title="Pending" icon="inbox" rows={pending}>
             {({ r, role }) => (
               <div className="request-actions">
@@ -129,7 +151,10 @@ export function Requests() {
                     <button className="outline" disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'rejected')}>Decline</button>
                   </>
                 ) : (
-                  <span className="status-badge pending">Awaiting response</span>
+                  <>
+                    <span className="status-badge pending">Awaiting response</span>
+                    <button className="outline" disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'rejected')}>Cancel</button>
+                  </>
                 )}
               </div>
             )}
@@ -182,7 +207,8 @@ export function Requests() {
           <Group title="Declined" icon="x" rows={declined} collapsedByDefault>
             {() => <span className="status-badge declined">Declined</span>}
           </Group>
-        </div>
+          </div>
+        </>
       )}
     </>
   )

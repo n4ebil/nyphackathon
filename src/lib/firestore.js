@@ -212,6 +212,17 @@ export async function cancelSession(matchId) {
   await updateDoc(doc(db, 'sessions', matchId), { status: 'cancelled' })
 }
 
+/** Reschedules an already-arranged session — day/time/format/location, no status change. */
+export async function editSession(matchId, details) {
+  await updateDoc(doc(db, 'sessions', matchId), {
+    day: details.day,
+    startTime: details.startTime,
+    endTime: details.endTime,
+    format: details.format,
+    location: details.location,
+  })
+}
+
 export async function saveSessionPlan(matchId, plan) {
   await updateDoc(doc(db, 'sessions', matchId), { plan })
 }
@@ -304,4 +315,48 @@ export async function checkIsAdmin(email) {
   if (isAdminEmail(email)) return true
   const snap = await getDoc(doc(db, 'adminEmails', email.toLowerCase()))
   return snap.exists()
+}
+
+// ---------------------------------------------------------------- messages
+// One conversation per *person*, not per matchId — the same two people can have
+// several matches over time (different modules, or tutor in one / student in
+// another), and splitting those into separate threads just fragments one
+// ongoing conversation. Each message still carries the matchId it was sent
+// under, so the thread can show which session it belongs to.
+
+// Fetched by single-field equality + filtered/sorted client-side (not a compound
+// where+orderBy query) so this doesn't need a composite Firestore index — consistent
+// with how sorting is already handled elsewhere in this file.
+export async function listMessagesBetween(userIdA, userIdB) {
+  const [fromA, fromB] = await Promise.all([
+    getDocs(query(collection(db, 'messages'), where('fromUserId', '==', userIdA))),
+    getDocs(query(collection(db, 'messages'), where('fromUserId', '==', userIdB))),
+  ])
+  return [...fromA.docs, ...fromB.docs]
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((m) => (m.fromUserId === userIdA && m.toUserId === userIdB) || (m.fromUserId === userIdB && m.toUserId === userIdA))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+}
+
+/** `type`/`proposal` are set for a reschedule proposal; plain messages omit them. */
+export async function sendMessage({ matchId, fromUserId, toUserId, text, type, proposal }) {
+  const payload = { matchId, fromUserId, toUserId, text, createdAt: new Date().toISOString() }
+  if (type) payload.type = type
+  if (proposal) payload.proposal = proposal
+  if (type === 'proposal') payload.status = 'pending'
+  await addDoc(collection(db, 'messages'), payload)
+}
+
+/** Accept/decline a reschedule proposal — only the recipient can call this (enforced in rules). */
+export async function respondToProposal(messageId, status) {
+  await updateDoc(doc(db, 'messages', messageId), { status })
+}
+
+/** Every message across all of the user's matches, for building a conversation list without one query per thread. */
+export async function listAllMessagesFor(userId) {
+  const [sent, received] = await Promise.all([
+    getDocs(query(collection(db, 'messages'), where('fromUserId', '==', userId))),
+    getDocs(query(collection(db, 'messages'), where('toUserId', '==', userId))),
+  ])
+  return [...sent.docs, ...received.docs].map((d) => ({ id: d.id, ...d.data() }))
 }
