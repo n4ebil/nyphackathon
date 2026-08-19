@@ -22,13 +22,18 @@ export function Requests() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [rows, setRows] = useState([])
   const [busyId, setBusyId] = useState(null)
   const [arrangingId, setArrangingId] = useState(null)
   const [search, setSearch] = useState('')
 
-  async function load() {
-    setLoading(true)
+  // silent=true on every action-triggered refresh — the initial full-page spinner
+  // (loading) briefly unmounts the whole list, which was collapsing the page and
+  // resetting scroll to the top right after clicking Accept/Cancel/Arrange, with
+  // no sense of what had just happened. Only the very first load needs it.
+  async function load(silent) {
+    if (!silent) setLoading(true)
     setError('')
     try {
       const [result, users] = await Promise.all([listMatchRequests(user.userId), listUsers()])
@@ -55,24 +60,41 @@ export function Requests() {
         // cleanup) — their request/session records don't disappear with them,
         // so skip rendering rows that would otherwise show a nonexistent user.
         .filter((row) => row.other)
+        // Newest first within every group — previously unsorted, so requests showed
+        // in whatever order the API happened to return them, making it impossible
+        // to tell which one you'd just acted on.
+        .sort((a, b) => (b.r.createdAt || '').localeCompare(a.r.createdAt || ''))
       setRows(withMeta)
     } catch (err) {
       setError(err.message || 'Could not load your requests.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
+    load(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.userId])
 
-  async function respond(matchId, status) {
+  useEffect(() => {
+    if (!success) return
+    const t = setTimeout(() => setSuccess(''), 5000)
+    return () => clearTimeout(t)
+  }, [success])
+
+  async function respond(matchId, status, successMessage) {
     setBusyId(matchId)
+    setError('')
     try {
       await respondToMatchRequest(matchId, status)
-      await load()
+      setSuccess(
+        successMessage ||
+          (status === 'accepted'
+            ? 'Request accepted — moved to Accepted, ready to arrange a session.'
+            : 'Request declined — moved to Declined.'),
+      )
+      await load(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -82,10 +104,12 @@ export function Requests() {
 
   async function arrange(matchId, details) {
     setBusyId(matchId)
+    setError('')
     try {
       await arrangeSession(matchId, details)
       setArrangingId(null)
-      await load()
+      setSuccess(`Session arranged for ${details.day} ${details.startTime}–${details.endTime} — see it under Sessions.`)
+      await load(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -114,6 +138,7 @@ export function Requests() {
       </div>
 
       {error && <Banner kind="error">{error}</Banner>}
+      {success && <Banner kind="info">{success}</Banner>}
 
       {loading ? (
         <AppLoader compact />
@@ -153,7 +178,7 @@ export function Requests() {
                 ) : (
                   <>
                     <span className="status-badge pending">Awaiting response</span>
-                    <button className="outline" disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'rejected')}>Cancel</button>
+                    <button className="outline" disabled={busyId === r.matchId} onClick={() => respond(r.matchId, 'rejected', 'Request cancelled.')}>Cancel</button>
                   </>
                 )}
               </div>

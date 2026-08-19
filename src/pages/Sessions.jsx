@@ -4,6 +4,7 @@ import { Banner, Spinner } from '../components/Spinner.jsx'
 import { AppLoader } from '../components/AppLoader.jsx'
 import { Icon } from '../components/Icon.jsx'
 import { Avatar } from '../components/Avatar.jsx'
+import { AddToCalendar } from '../components/AddToCalendar.jsx'
 import { generateSessionPlan } from '../lib/ai.js'
 import {
   cancelSession,
@@ -28,6 +29,7 @@ export function Sessions() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [rows, setRows] = useState([])
   const [feedback, setFeedback] = useState([])
   const [busyId, setBusyId] = useState(null)
@@ -35,8 +37,11 @@ export function Sessions() {
   const [editingId, setEditingId] = useState(null)
   const [search, setSearch] = useState('')
 
-  async function load() {
-    setLoading(true)
+  // silent=true on action-triggered refreshes so the list doesn't unmount behind the
+  // full-page spinner — that was collapsing the page and resetting scroll right after
+  // clicking Cancel/Complete/Edit, with nothing telling you what had just happened.
+  async function load(silent) {
+    if (!silent) setLoading(true)
     setError('')
     try {
       const [result, users] = await Promise.all([listMatchRequests(user.userId), listUsers()])
@@ -69,20 +74,28 @@ export function Sessions() {
     } catch (err) {
       setError(err.message || 'Could not load your sessions.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
+    load(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.userId])
 
+  useEffect(() => {
+    if (!success) return
+    const t = setTimeout(() => setSuccess(''), 5000)
+    return () => clearTimeout(t)
+  }, [success])
+
   async function complete(matchId) {
     setBusyId(matchId)
+    setError('')
     try {
       await completeSession(matchId)
-      await load()
+      setSuccess('Marked as completed — moved to Completed.')
+      await load(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -92,9 +105,11 @@ export function Sessions() {
 
   async function cancel(matchId) {
     setBusyId(matchId)
+    setError('')
     try {
       await cancelSession(matchId)
-      await load()
+      setSuccess('Session cancelled — moved to Cancelled.')
+      await load(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -104,10 +119,12 @@ export function Sessions() {
 
   async function edit(matchId, details) {
     setBusyId(matchId)
+    setError('')
     try {
       await editSession(matchId, details)
       setEditingId(null)
-      await load()
+      setSuccess(`Session updated — now ${details.day} ${details.startTime}–${details.endTime}.`)
+      await load(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -117,6 +134,7 @@ export function Sessions() {
 
   async function leaveFeedback(matchId, toUser, { rating, helpful, comment }) {
     setBusyId(matchId)
+    setError('')
     try {
       await submitFeedback({
         sessionId: matchId,
@@ -127,7 +145,8 @@ export function Sessions() {
         comment,
         createdAt: new Date().toISOString(),
       })
-      await load()
+      setSuccess('Feedback submitted — thanks!')
+      await load(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -137,9 +156,11 @@ export function Sessions() {
 
   async function savePlan(matchId, plan) {
     setBusyId(matchId)
+    setError('')
     try {
       await saveSessionPlan(matchId, plan)
-      await load()
+      setSuccess('Session plan saved.')
+      await load(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -167,6 +188,7 @@ export function Sessions() {
       </div>
 
       {error && <Banner kind="error">{error}</Banner>}
+      {success && <Banner kind="info">{success}</Banner>}
 
       {loading ? (
         <AppLoader compact />
@@ -429,6 +451,19 @@ function SessionDetailModal({ r, session, role, other, topics, onClose }) {
                 <><Icon name="clock" size={12} /> Zoom link is being generated — check back in a moment.</>
               )}
             </p>
+          )}
+          {session.status === 'arranged' && (
+            <AddToCalendar
+              className="modal-add-to-calendar"
+              event={{
+                title: `${r.moduleName} with ${other?.name || other?.email || 'your match'}`,
+                description: `NYPkaki tutoring session${session.zoomLink ? ` — join: ${session.zoomLink}` : ''}`,
+                location: session.format === 'online' ? session.zoomLink || 'Online' : session.location,
+                day: session.day,
+                startTime: session.startTime,
+                endTime: session.endTime,
+              }}
+            />
           )}
         </div>
 

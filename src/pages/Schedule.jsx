@@ -39,6 +39,7 @@ export function Schedule() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [busyId, setBusyId] = useState(null)
 
   const [text, setText] = useState('')
@@ -48,8 +49,11 @@ export function Schedule() {
   const [scheduleForm, setScheduleForm] = useState({ date: '', startTime: '14:00', endTime: '15:00' })
   const [scheduling, setScheduling] = useState(false)
 
-  async function load() {
-    setLoading(true)
+  // silent=true on action-triggered refreshes so the list doesn't unmount behind the
+  // full-page spinner — that was collapsing the page and resetting scroll right after
+  // clicking Interested/Cancel/Confirm, with nothing telling you what had just happened.
+  async function load(silent) {
+    if (!silent) setLoading(true)
     setError('')
     try {
       const [reqs, allInterests, subjects, allUsers] = await Promise.all([
@@ -70,13 +74,19 @@ export function Schedule() {
     } catch (err) {
       setError(err.message || 'Could not load the schedule.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
+    load(false)
   }, [])
+
+  useEffect(() => {
+    if (!success) return
+    const t = setTimeout(() => setSuccess(''), 5000)
+    return () => clearTimeout(t)
+  }, [success])
 
   async function onRequest(e) {
     e.preventDefault()
@@ -87,7 +97,8 @@ export function Schedule() {
       const saved = await submitClassRequest(user, text.trim())
       await registerInterest(saved.requestId, user.userId, user.name || user.email)
       setText('')
-      await load()
+      setSuccess('Request posted — it now shows in Open requests below.')
+      await load(true)
     } catch (err) {
       setError(err.message || 'Could not submit that request.')
     } finally {
@@ -102,7 +113,8 @@ export function Schedule() {
     try {
       if (already) await unregisterInterest(req.requestId, user.userId)
       else await registerInterest(req.requestId, user.userId, user.name || user.email)
-      await load()
+      setSuccess(already ? "You're no longer marked as interested." : "You're in — marked as interested.")
+      await load(true)
     } catch (err) {
       setError(err.message || 'Could not update your interest.')
     } finally {
@@ -116,7 +128,8 @@ export function Schedule() {
     setError('')
     try {
       await deleteClassRequest(req.requestId)
-      await load()
+      setSuccess('Request cancelled.')
+      await load(true)
     } catch (err) {
       setError(err.message || 'Could not cancel that request.')
     } finally {
@@ -147,7 +160,8 @@ export function Schedule() {
         location: autoLocation(interestCount),
       })
       setSchedulingId(null)
-      await load()
+      setSuccess(`Class confirmed for ${formatDate(scheduleForm.date)} — moved to scheduled.`)
+      await load(true)
     } catch (err) {
       setError(err.message || 'Could not schedule that class.')
     } finally {
@@ -180,6 +194,7 @@ export function Schedule() {
       </div>
 
       {error && <Banner kind="error">{error}</Banner>}
+      {success && <Banner kind="info">{success}</Banner>}
 
       <div className="card find-form">
         <h2>Request a class</h2>

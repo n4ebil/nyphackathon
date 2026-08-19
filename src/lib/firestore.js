@@ -205,7 +205,7 @@ export async function listAllSessions() {
 }
 
 export async function completeSession(matchId) {
-  await updateDoc(doc(db, 'sessions', matchId), { status: 'completed' })
+  await updateDoc(doc(db, 'sessions', matchId), { status: 'completed', completedAt: new Date().toISOString() })
 }
 
 export async function cancelSession(matchId) {

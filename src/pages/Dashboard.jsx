@@ -9,11 +9,25 @@ import {
   getSessionsByMatchIds,
   getTeachingSubjects,
   listAllAvailability,
+  listAllFeedback,
   listAllLearningRequests,
   listMatchRequests,
   listUsers,
 } from '../lib/firestore.js'
 import { computeRecommendedTutors } from '../lib/match.js'
+import { computeAchievements } from '../shared/achievements.ts'
+
+/** localStorage, not Firestore — this is purely "have I shown you this celebration yet", nothing worth syncing across devices or persisting server-side. */
+function seenAchievementIds(userId) {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(`nypkaki-achievements-seen-${userId}`) || '[]'))
+  } catch {
+    return new Set()
+  }
+}
+function saveSeenAchievementIds(userId, ids) {
+  localStorage.setItem(`nypkaki-achievements-seen-${userId}`, JSON.stringify([...ids]))
+}
 
 const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const FORMAT_META = {
@@ -37,6 +51,7 @@ export function Dashboard() {
   const [nextSession, setNextSession] = useState(null)
   const [pending, setPending] = useState([])
   const [stats, setStats] = useState({ completed: 0, modulesLearning: 0, tutoring: 0, upcoming: 0 })
+  const [newBadges, setNewBadges] = useState([])
 
   useEffect(() => {
     let cancelled = false
@@ -44,13 +59,14 @@ export function Dashboard() {
       setLoading(true)
       setLoadError('')
       try {
-        const [users, matchRequests, myTeaching, myRequests, availability, recommendedTutors] = await Promise.all([
+        const [users, matchRequests, myTeaching, myRequests, availability, recommendedTutors, feedback] = await Promise.all([
           listUsers(),
           listMatchRequests(user.userId),
           getTeachingSubjects(user.userId),
           listAllLearningRequests(),
           listAllAvailability(),
           computeRecommendedTutors(user, { limit: 3 }),
+          listAllFeedback(),
         ])
         if (cancelled) return
 
@@ -78,6 +94,18 @@ export function Dashboard() {
 
         const completedCount = sessions.filter((s) => s.status === 'completed').length
         const modulesLearning = new Set(myRequests.filter((r) => r.userId === user.userId).map((r) => r.moduleId)).size
+
+        const achievements = computeAchievements({
+          userId: user.userId,
+          sessions,
+          matchRequests: [...matchRequests.incoming, ...matchRequests.outgoing],
+          feedback,
+          teachingSubjects: myTeaching,
+        })
+        const seen = seenAchievementIds(user.userId)
+        const earned = achievements.filter((a) => a.earned)
+        setNewBadges(earned.filter((a) => !seen.has(a.id)))
+        saveSeenAchievementIds(user.userId, new Set(earned.map((a) => a.id)))
 
         setRecommended(recommendedTutors)
         setAvailabilityByTutor(slotsByTutor)
@@ -115,6 +143,20 @@ export function Dashboard() {
       </section>
 
       {loadError && <Banner kind="error">{loadError}</Banner>}
+
+      {newBadges.length > 0 && (
+        <div className="new-badge-banner">
+          <div>
+            <b>🎉 New achievement{newBadges.length > 1 ? 's' : ''} unlocked!</b>
+            <div className="badge-mini-row">
+              {newBadges.map((b) => (
+                <span key={b.id} className="badge-mini" title={b.description}>{b.icon} {b.title}</span>
+              ))}
+            </div>
+          </div>
+          <Link to="/profile" className="view-tutors">View all <Icon name="chevron" size={14} /></Link>
+        </div>
+      )}
 
       {loading ? (
         <AppLoader compact />

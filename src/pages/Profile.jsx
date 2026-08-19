@@ -3,7 +3,17 @@ import { useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Banner, Spinner } from '../components/Spinner.jsx'
 import { Icon } from '../components/Icon.jsx'
-import { getAvailability, getTeachingSubjects, replaceAvailability, replaceTeachingSubjects, upsertUserProfile } from '../lib/firestore.js'
+import {
+  getAvailability,
+  getSessionsByMatchIds,
+  getTeachingSubjects,
+  listAllFeedback,
+  listMatchRequests,
+  replaceAvailability,
+  replaceTeachingSubjects,
+  upsertUserProfile,
+} from '../lib/firestore.js'
+import { computeAchievements } from '../shared/achievements.ts'
 import { modulesForCourse, NYP_COURSE_CATALOG, schoolsForCourse } from '../shared/nyp.ts'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -88,6 +98,9 @@ export function Profile() {
   const [selectedCells, setSelectedCells] = useState(new Set())
   const dragRef = useRef(null)
 
+  const [achievements, setAchievements] = useState([])
+  const [loadingAchievements, setLoadingAchievements] = useState(true)
+
   const [error, setError] = useState('')
   const location = useLocation()
 
@@ -113,6 +126,29 @@ export function Profile() {
       }
     }
     load()
+  }, [user.userId])
+
+  useEffect(() => {
+    async function loadAchievements() {
+      setLoadingAchievements(true)
+      try {
+        const [result, subjects, allFeedback] = await Promise.all([
+          listMatchRequests(user.userId),
+          getTeachingSubjects(user.userId),
+          listAllFeedback(),
+        ])
+        const matchRequests = [...result.incoming, ...result.outgoing]
+        const sessions = matchRequests.length ? await getSessionsByMatchIds(matchRequests.map((r) => r.matchId)) : []
+        setAchievements(
+          computeAchievements({ userId: user.userId, sessions, matchRequests, feedback: allFeedback, teachingSubjects: subjects }),
+        )
+      } catch (err) {
+        setError(err.message || 'Could not load your achievements.')
+      } finally {
+        setLoadingAchievements(false)
+      }
+    }
+    loadAchievements()
   }, [user.userId])
 
   async function saveProfile(e) {
@@ -309,6 +345,32 @@ export function Profile() {
             {savingProfile ? <Spinner /> : profileSaved ? <><Icon name="check" size={16} /> Saved</> : 'Save changes'}
           </button>
         </form>
+      </div>
+
+      <div className="card">
+        <h2>Achievements</h2>
+        <p className="recommend-copy">
+          Earned from your real session history — {achievements.filter((a) => a.earned).length}/{achievements.length} unlocked.
+        </p>
+        {loadingAchievements ? (
+          <Spinner />
+        ) : (
+          <div className="badge-grid">
+            {achievements.map((a) => (
+              <div key={a.id} className={'badge-tile' + (a.earned ? ' earned' : '')} title={a.description}>
+                <span className="badge-icon">{a.icon}</span>
+                <b>{a.title}</b>
+                {a.earned ? (
+                  <span className="badge-status earned">Earned</span>
+                ) : a.progress ? (
+                  <span className="badge-status">{a.progress.current}/{a.progress.target}</span>
+                ) : (
+                  <span className="badge-status">Locked</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="card" id="teaching">

@@ -98,6 +98,105 @@ export async function generateLearningGoal({ text, moduleName, topics }) {
   }
 }
 
+const REQUEST_SCHEMA_PROPS = {
+  moduleName: null, // filled in per-call with the enum of the student's own course competencies
+  topics: Schema.array({ items: Schema.string() }),
+  urgency: Schema.enumString({ enum: ['low', 'medium', 'high'] }),
+  deadlineDaysFromNow: Schema.integer(),
+  preferredFormat: Schema.enumString({ enum: ['in-person', 'online', 'either', 'unspecified'] }),
+  durationMinutes: Schema.integer(),
+  availabilityDay: Schema.enumString({ enum: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'none'] }),
+  availabilityStart: Schema.string(),
+  availabilityEnd: Schema.string(),
+  goal: Schema.string(),
+}
+
+function getRequestModel(names) {
+  if (!ai) return null
+  return getGenerativeModel(ai, {
+    model: 'gemini-flash-latest',
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: Schema.object({
+        properties: { ...REQUEST_SCHEMA_PROPS, moduleName: Schema.enumString({ enum: [...names, 'None of these'] }) },
+      }),
+    },
+  })
+}
+
+/**
+ * Full natural-language understanding in one model call — module, topics,
+ * urgency, deadline, format, duration, availability and a one-line goal —
+ * instead of splitting AI (module + goal) from local English-keyword regex
+ * (everything else, see shared/nlp.ts). The regex approach only understands
+ * English; a student writing in Mandarin, Malay, Tamil, or anything else gets
+ * silently misparsed by it. The model is explicitly told to understand the
+ * request in whatever language it's written and respond in English using the
+ * exact competency/topic names from the student's own course, so downstream
+ * code (matching, filters, saved records) never has to deal with translation.
+ *
+ * Returns null (caller falls back to the local parser + narrower AI calls)
+ * when AI is unavailable, the call fails, or nothing in the course matched.
+ */
+export async function parseRequestWithAI(text, course) {
+  const candidates = modulesForCourse(course)
+  if (!candidates.length) return null
+
+  try {
+    const model = getRequestModel(candidates.map((c) => c.moduleName))
+    if (!model) return null
+
+    const catalog = candidates.map((m) => `- ${m.moduleName} (topics: ${m.topics.join(', ')})`).join('\n')
+    const result = await model.generateContent(
+      `A student wrote this tutoring help request, possibly in a language other than English:\n"${text}"\n\n` +
+        `Their course offers these competencies:\n${catalog}\n\n` +
+        `Understand the request regardless of what language it's written in. Respond ALWAYS in English, ` +
+        `using the exact competency and topic names from the list above (never translate or paraphrase them):\n` +
+        `- moduleName: the ONE competency this is about ("None of these" if nothing clearly matches)\n` +
+        `- topics: which of that competency's listed topics are relevant (exact strings from its list; [] if unclear)\n` +
+        `- urgency: "high" if a test/exam/deadline soon is mentioned, "medium" if somewhat time-sensitive, else "low"\n` +
+        `- deadlineDaysFromNow: whole number of days from today until any deadline mentioned, or -1 if none mentioned\n` +
+        `- preferredFormat: "online" or "in-person" if stated, "either" if both are fine, else "unspecified"\n` +
+        `- durationMinutes: session length mentioned, or 0 if unspecified\n` +
+        `- availabilityDay: the day of the week they said they're free, or "none"\n` +
+        `- availabilityStart / availabilityEnd: that time window in 24-hour HH:MM, or "" if no time was mentioned\n` +
+        `- goal: one short sentence (under 12 words), concrete not generic, on specifically what they want to achieve`,
+    )
+    const parsed = JSON.parse(result.response.text())
+    const chosen = candidates.find((c) => c.moduleName === parsed.moduleName)
+    if (!chosen) return null
+
+    const validTopics = parsed.topics.filter((t) => chosen.topics.includes(t))
+    const deadline =
+      Number.isFinite(parsed.deadlineDaysFromNow) && parsed.deadlineDaysFromNow >= 0
+        ? new Date(Date.now() + parsed.deadlineDaysFromNow * 86_400_000).toISOString().slice(0, 10)
+        : undefined
+    const availability =
+      parsed.availabilityDay && parsed.availabilityDay !== 'none'
+        ? {
+            day: parsed.availabilityDay,
+            startTime: parsed.availabilityStart || undefined,
+            endTime: parsed.availabilityEnd || undefined,
+          }
+        : undefined
+
+    return {
+      moduleId: chosen.moduleId,
+      moduleName: chosen.moduleName,
+      topics: validTopics.length ? validTopics : chosen.topics.slice(0, 2),
+      urgency: parsed.urgency,
+      deadline,
+      preferredFormat: parsed.preferredFormat === 'unspecified' ? undefined : parsed.preferredFormat,
+      duration: parsed.durationMinutes > 0 ? parsed.durationMinutes : undefined,
+      availability,
+      goal: parsed.goal?.trim() || undefined,
+    }
+  } catch (err) {
+    console.error('AI full-request parsing unavailable, falling back to local parser.', err)
+    return null
+  }
+}
+
 const PLAN_SCHEMA = Schema.object({
   properties: {
     warmup: Schema.string(),

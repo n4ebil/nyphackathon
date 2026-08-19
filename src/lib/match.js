@@ -2,7 +2,7 @@ import { findMatches, buildExplanation } from '../shared/matching.ts'
 import { extractAvailability, parseHelpRequest } from '../shared/nlp.ts'
 import { MODULES, modulesForCourse } from '../shared/nyp.ts'
 import { computeTutorStats } from '../shared/reliability.ts'
-import { generateLearningGoal, pickModuleWithAI } from './ai.js'
+import { generateLearningGoal, parseRequestWithAI, pickModuleWithAI } from './ai.js'
 import { isAwsConfigured, computeMatchesRemote } from './awsApi.js'
 import { areRelatedModules } from '../shared/nyp.ts'
 import {
@@ -19,12 +19,18 @@ import {
 } from './firestore.js'
 
 /**
- * Shared by both request flows below: AI (Gemini, if configured) picks the
- * competency; topics are recomputed against whichever module actually got
- * chosen, so they always describe that module rather than the local
- * heuristic parser's (possibly different) first guess.
+ * Every field a free-text help request can yield — module, topics, urgency,
+ * deadline, format, duration, availability, goal. Tries the single
+ * multilingual AI parse first (parseRequestWithAI — understands the request
+ * in whatever language it's written, responds in the course's own English
+ * competency/topic names). Falls back to the old split — AI just for the
+ * module, English-keyword regex (shared/nlp.ts) for everything else — when
+ * AI is unavailable, the call fails, or nothing in the course matched.
  */
-async function resolveModuleAndTopics(student, text) {
+async function resolveFullRequest(student, text) {
+  const aiResult = await parseRequestWithAI(text, student.course)
+  if (aiResult) return { ...aiResult, parsed: null, parsedBy: 'ai' }
+
   const parsed = parseHelpRequest(text, student.course)
   const aiModule = await pickModuleWithAI(text, student.course)
   const fallback = modulesForCourse(student.course)[0] || MODULES[0]
@@ -34,11 +40,20 @@ async function resolveModuleAndTopics(student, text) {
 
   const lower = text.toLowerCase()
   const topics = chosen.topics.filter((t) => lower.includes(t.toLowerCase()))
+  const finalTopics = topics.length ? topics : chosen.topics.slice(0, 2)
+  const availability = extractAvailability(lower)
+  const goal = await generateLearningGoal({ text, moduleName: chosen.moduleName, topics: finalTopics })
 
   return {
     moduleId: chosen.moduleId,
     moduleName: chosen.moduleName,
-    topics: topics.length ? topics : chosen.topics.slice(0, 2),
+    topics: finalTopics,
+    urgency: parsed.urgency,
+    deadline: parsed.deadline || undefined,
+    preferredFormat: parsed.preferredFormat,
+    duration: parsed.duration,
+    availability,
+    goal,
     parsed,
     parsedBy: aiModule ? 'ai' : 'local',
   }
@@ -49,45 +64,41 @@ async function resolveModuleAndTopics(student, text) {
  * without saving anything — lets the UI show an editable review step first.
  */
 export async function previewLearningRequest(student, text) {
-  const { moduleId, moduleName, topics, parsed, parsedBy } = await resolveModuleAndTopics(student, text)
+  const r = await resolveFullRequest(student, text)
   return {
-    moduleId,
-    moduleName,
-    topics,
+    moduleId: r.moduleId,
+    moduleName: r.moduleName,
+    topics: r.topics,
     description: text,
-    urgency: parsed.urgency,
-    deadline: parsed.deadline || null,
-    preferredFormat: parsed.preferredFormat || student.preferredFormat || 'either',
-    duration: parsed.duration || 60,
-    parsedBy,
+    urgency: r.urgency,
+    deadline: r.deadline || null,
+    preferredFormat: r.preferredFormat || student.preferredFormat || 'either',
+    duration: r.duration || 60,
+    parsedBy: r.parsedBy,
   }
 }
 
 /**
  * Full natural-language understanding for the "describe what you need" flow
- * on Find Tutors: module/topics (AI-assisted, see resolveModuleAndTopics),
- * urgency/deadline/format/duration/availability (local, deterministic —
- * shared/nlp.ts), and a one-line learning goal (AI, see generateLearningGoal
- * in lib/ai.js). Nothing is saved here; the UI shows this back to the
- * student to confirm or edit before it drives a search.
+ * on Find Tutors — module, topics, urgency, deadline, format, duration,
+ * availability and a one-line goal, all from resolveFullRequest above.
+ * Nothing is saved here; the UI shows this back to the student to confirm or
+ * edit before it drives a search.
  */
 export async function previewNaturalLanguageRequest(student, text) {
-  const { moduleId, moduleName, topics, parsed, parsedBy } = await resolveModuleAndTopics(student, text)
-  const availability = extractAvailability(text.toLowerCase())
-  const goal = await generateLearningGoal({ text, moduleName, topics })
-
+  const r = await resolveFullRequest(student, text)
   return {
-    moduleId,
-    moduleName,
-    topics,
+    moduleId: r.moduleId,
+    moduleName: r.moduleName,
+    topics: r.topics,
     description: text,
-    goal,
-    urgency: parsed.urgency,
-    deadline: parsed.deadline || null,
-    availability,
-    preferredFormat: parsed.preferredFormat || student.preferredFormat || 'either',
-    duration: parsed.duration || 60,
-    parsedBy,
+    goal: r.goal,
+    urgency: r.urgency,
+    deadline: r.deadline || null,
+    availability: r.availability,
+    preferredFormat: r.preferredFormat || student.preferredFormat || 'either',
+    duration: r.duration || 60,
+    parsedBy: r.parsedBy,
   }
 }
 
@@ -117,7 +128,7 @@ export async function submitLearningRequest(student, text, fields) {
 
 /** Parses free text into a class request (Schedule page) and saves it to Firestore. */
 export async function submitClassRequest(student, text) {
-  const { moduleId, moduleName, topics, parsedBy } = await resolveModuleAndTopics(student, text)
+  const { moduleId, moduleName, topics, parsedBy } = await resolveFullRequest(student, text)
 
   const request = {
     studentId: student.userId,

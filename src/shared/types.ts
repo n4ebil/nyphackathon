@@ -121,6 +121,8 @@ export interface Session {
   zoomMeetingId?: string | number
   /** ISO timestamp — set by the sendClassReminders scheduled function once a reminder email has gone out, so it never sends twice. */
   reminderSentAt?: string
+  /** ISO timestamp set when status flips to 'completed' — undefined for sessions completed before this field existed. */
+  completedAt?: string
 }
 
 export interface Feedback {
@@ -155,4 +157,14 @@ export interface MatchRequest {
   createdAt: string
   /** Compatibility score at the moment the request was sent — undefined for requests sent before this field existed. */
   score?: number
+}
+
+export interface Achievement {
+  id: string
+  icon: string
+  title: string
+  description: string
+  earned: boolean
+  /** Only set for count-based badges not yet earned, so the UI can show "3/5". */
+  progress?: { current: number; target: number }
 }

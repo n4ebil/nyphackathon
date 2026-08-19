@@ -7,6 +7,7 @@ import { AppLoader } from '../components/AppLoader.jsx'
 import { MODULES, findModule, modulesForCourse } from '../shared/nyp.ts'
 import { buildExplanation, findMatches } from '../shared/matching.ts'
 import { computeTutorStats } from '../shared/reliability.ts'
+import { computeAchievements } from '../shared/achievements.ts'
 import {
   getAvailability,
   listAllAvailability,
@@ -85,12 +86,14 @@ export function FindTutors() {
         if (cancelled) return
 
         const tutorStatsById = {}
+        const achievementsById = {}
         for (const u of users) {
           if (u.userId === user.userId) continue
           tutorStatsById[u.userId] = computeTutorStats({ tutorId: u.userId, feedback, sessions, matchRequests, teachingSubjects })
+          achievementsById[u.userId] = computeAchievements({ userId: u.userId, sessions, matchRequests, feedback, teachingSubjects })
         }
 
-        setData({ users, teachingSubjects, availability, studentSlots, learningRequests, tutorStatsById })
+        setData({ users, teachingSubjects, availability, studentSlots, learningRequests, tutorStatsById, achievementsById })
         setFilters((f) => {
           const moduleId = defaultModuleId(user, learningRequests)
           const mod = moduleId ? findModule(moduleId) : null
@@ -433,6 +436,7 @@ export function FindTutors() {
                       match={m}
                       topics={tutorTopics(data, m) || []}
                       slots={data.availability.filter((a) => a.userId === m.tutorId)}
+                      badges={data.achievementsById[m.tutorId]?.filter((a) => a.earned) || []}
                       sent={sentIds.has(m.tutorId + '--' + m.moduleId)}
                       busy={busyId === m.matchId}
                       onSend={(message) => requestSession(m, message)}
@@ -452,6 +456,7 @@ export function FindTutors() {
           match={profileTutor}
           subjects={data.teachingSubjects.filter((s) => s.userId === profileTutor.tutorId)}
           slots={data.availability.filter((a) => a.userId === profileTutor.tutorId)}
+          badges={data.achievementsById[profileTutor.tutorId]?.filter((a) => a.earned) || []}
           onClose={() => setProfileTutor(null)}
         />
       )}
@@ -799,7 +804,7 @@ function formatSlots(slots, max = 3) {
   return { shown: sorted.slice(0, max), extra: Math.max(sorted.length - max, 0) }
 }
 
-function TutorCard({ match, topics, slots, sent, busy, onSend, onViewProfile, onWhyMatch }) {
+function TutorCard({ match, topics, slots, badges, sent, busy, onSend, onViewProfile, onWhyMatch }) {
   const [message, setMessage] = useState(`Hi! I need help understanding ${match.moduleName}.`)
   const band = match.score >= 80 ? 'excellent' : match.score >= 60 ? 'good' : match.score >= 40 ? 'possible' : 'low'
   const { shown, extra } = formatSlots(slots)
@@ -836,6 +841,15 @@ function TutorCard({ match, topics, slots, sent, busy, onSend, onViewProfile, on
           {stats?.sessionsCompleted || 0} session{stats?.sessionsCompleted === 1 ? '' : 's'} completed
         </span>
       </div>
+
+      {badges?.length > 0 && (
+        <div className="badge-mini-row">
+          {badges.slice(0, 4).map((b) => (
+            <span key={b.id} className="badge-mini" title={b.description}>{b.icon} {b.title}</span>
+          ))}
+          {badges.length > 4 && <span className="badge-mini">+{badges.length - 4} more</span>}
+        </div>
+      )}
 
       <p className="explanation">{match.explanation}</p>
 
@@ -881,7 +895,7 @@ function TutorCard({ match, topics, slots, sent, busy, onSend, onViewProfile, on
   )
 }
 
-function TutorProfileModal({ match, subjects, slots, onClose }) {
+function TutorProfileModal({ match, subjects, slots, badges, onClose }) {
   const stats = match.tutorStats
   const { shown, extra } = formatSlots(slots, 8)
   return (
@@ -909,6 +923,17 @@ function TutorProfileModal({ match, subjects, slots, onClose }) {
           {stats?.responseRate != null && <span className="tstat"><Icon name="inbox" size={13} /> {stats.responseRate}% response rate</span>}
           {stats?.studentsHelped ? <span className="tstat"><Icon name="user" size={13} /> {stats.studentsHelped} students helped</span> : null}
         </div>
+
+        {badges?.length > 0 && (
+          <div className="modal-section">
+            <h3>Achievements</h3>
+            <div className="badge-mini-row">
+              {badges.map((b) => (
+                <span key={b.id} className="badge-mini" title={b.description}>{b.icon} {b.title}</span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="modal-section">
           <h3>Teaches</h3>
