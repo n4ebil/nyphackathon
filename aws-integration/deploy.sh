@@ -1,27 +1,12 @@
 #!/usr/bin/env bash
-#
-# Run this in the AWS Academy Learner Lab's own browser terminal.
-#
-# What it creates:
-#   1. DynamoDB table  TutoringMatchRequests   (+ 2 GSIs: tutorId-index, studentId-index)
-#   2. Lambda function tutoring-match-api      (Node.js, uses the AWS SDK v3
-#                                                already bundled in the Lambda
-#                                                runtime -- no npm install)
-#   3. HTTP API Gateway in front of it, with CORS enabled for the browser
-#
-# Safe to re-run: it skips anything that already exists, and always pushes
-# the latest Lambda code.
-#
-# Usage:
-#   chmod +x deploy.sh
-#   ./deploy.sh
-#
 set -euo pipefail
 
 REGION="${AWS_REGION:-us-east-1}"
 TABLE_NAME="TutoringMatchRequests"
 FUNCTION_NAME="tutoring-match-api"
 API_NAME="tutoring-match-api"
+TOPIC_NAME="tutoring-match-notifications"
+NOTIFY_EMAIL="${NOTIFY_EMAIL:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAMBDA_DIR="$SCRIPT_DIR/lambda"
 
@@ -32,11 +17,10 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --region 
 echo "== Locating LabRole =="
 ROLE_ARN=$(aws iam get-role --role-name LabRole --query 'Role.Arn' --output text 2>/dev/null || true)
 if [ -z "$ROLE_ARN" ] || [ "$ROLE_ARN" = "None" ]; then
-  echo "LabRole not found by exact name, searching for a similarly named role..."
   ROLE_ARN=$(aws iam list-roles --query "Roles[?contains(RoleName, 'LabRole') || contains(RoleName, 'voclabs')].Arn | [0]" --output text)
 fi
 if [ -z "$ROLE_ARN" ] || [ "$ROLE_ARN" = "None" ]; then
-  echo "ERROR: Could not find LabRole. Run 'aws iam list-roles --query \"Roles[].RoleName\"' and set ROLE_ARN manually." >&2
+  echo "ERROR: Could not find LabRole." >&2
   exit 1
 fi
 echo "Using role: $ROLE_ARN"
@@ -59,9 +43,29 @@ else
         {"IndexName":"studentId-index","KeySchema":[{"AttributeName":"studentId","KeyType":"HASH"}],"Projection":{"ProjectionType":"ALL"}}
       ]' \
     --region "$REGION"
-
   echo "Waiting for table to become active..."
   aws dynamodb wait table-exists --table-name "$TABLE_NAME" --region "$REGION"
+fi
+
+echo "== Setting up SNS topic ($TOPIC_NAME) =="
+TOPIC_ARN=$(aws sns list-topics --query "Topics[?contains(TopicArn, ':$TOPIC_NAME')].TopicArn | [0]" --output text --region "$REGION")
+if [ -z "$TOPIC_ARN" ] || [ "$TOPIC_ARN" = "None" ]; then
+  TOPIC_ARN=$(aws sns create-topic --name "$TOPIC_NAME" --query TopicArn --output text --region "$REGION")
+  echo "Created topic: $TOPIC_ARN"
+else
+  echo "Topic already exists: $TOPIC_ARN"
+fi
+
+if [ -n "$NOTIFY_EMAIL" ]; then
+  EXISTING_SUB=$(aws sns list-subscriptions-by-topic --topic-arn "$TOPIC_ARN" --query "Subscriptions[?Endpoint=='$NOTIFY_EMAIL'].SubscriptionArn | [0]" --output text --region "$REGION")
+  if [ -z "$EXISTING_SUB" ] || [ "$EXISTING_SUB" = "None" ]; then
+    aws sns subscribe --topic-arn "$TOPIC_ARN" --protocol email --notification-endpoint "$NOTIFY_EMAIL" --region "$REGION" >/dev/null
+    echo "Subscribed $NOTIFY_EMAIL -- check that inbox and click the confirmation link!"
+  else
+    echo "$NOTIFY_EMAIL is already subscribed."
+  fi
+else
+  echo "No NOTIFY_EMAIL set -- skipping email subscription."
 fi
 
 echo "== Packaging Lambda code =="
@@ -70,7 +74,6 @@ rm -f "$ZIP_PATH"
 if command -v zip >/dev/null 2>&1; then
   (cd "$LAMBDA_DIR" && zip -r "$ZIP_PATH" index.js matching.js >/dev/null)
 else
-  echo "'zip' not found, falling back to python3's zipfile module."
   python3 - "$LAMBDA_DIR" "$ZIP_PATH" <<'PYEOF'
 import sys, zipfile, os
 lambda_dir, zip_path = sys.argv[1], sys.argv[2]
@@ -91,7 +94,7 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >
   aws lambda wait function-updated --function-name "$FUNCTION_NAME" --region "$REGION"
   aws lambda update-function-configuration \
     --function-name "$FUNCTION_NAME" \
-    --environment "Variables={TABLE_NAME=$TABLE_NAME}" \
+    --environment "Variables={TABLE_NAME=$TABLE_NAME,TOPIC_ARN=$TOPIC_ARN}" \
     --region "$REGION" >/dev/null
 else
   aws lambda create-function \
@@ -102,7 +105,7 @@ else
     --zip-file "fileb://$ZIP_PATH" \
     --timeout 15 \
     --memory-size 256 \
-    --environment "Variables={TABLE_NAME=$TABLE_NAME}" \
+    --environment "Variables={TABLE_NAME=$TABLE_NAME,TOPIC_ARN=$TOPIC_ARN}" \
     --region "$REGION" >/dev/null
   aws lambda wait function-active --function-name "$FUNCTION_NAME" --region "$REGION"
 fi
@@ -138,7 +141,7 @@ echo ""
 echo "=================================================================="
 echo " Deployment complete."
 echo " API base URL: $API_ENDPOINT"
+echo " SNS Topic ARN: $TOPIC_ARN"
 echo ""
-echo " Add this to your frontend .env.local and to Vercel's env vars as:"
 echo "   VITE_API_BASE_URL=$API_ENDPOINT"
 echo "=================================================================="
