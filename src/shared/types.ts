@@ -119,6 +119,8 @@ export interface Session {
   /** Host-only "start" link — saved for completeness but not surfaced in the UI yet. */
   zoomStartUrl?: string
   zoomMeetingId?: string | number
+  /** ISO timestamp — set by onZoomWebhook the moment Zoom reports the meeting actually ended (real signal, not a scheduled-time guess). */
+  zoomEndedAt?: string
   /** ISO timestamp — set by the sendClassReminders scheduled function once a reminder email has gone out, so it never sends twice. */
   reminderSentAt?: string
   /** ISO timestamp set when status flips to 'completed' — undefined for sessions completed before this field existed. */

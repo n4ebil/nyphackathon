@@ -972,6 +972,8 @@ input.plan-block-time { width: 92px; }
   background: var(--bg); border-bottom: 1px solid var(--line);
 }
 .msg-session-strip.arranged { color: var(--blue-dark); background: var(--lav); }
+.msg-session-strip.ending { color: var(--amber); background: var(--amber-light); }
+.msg-session-strip.closed { color: var(--muted); background: var(--bg); }
 .msg-session-strip a { color: inherit; font-weight: 600; text-decoration: underline; }
 
 .msg-templates { display: flex; flex-wrap: wrap; gap: 7px; padding: 10px 16px 0; }

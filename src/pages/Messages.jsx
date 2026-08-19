@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Avatar } from '../components/Avatar.jsx'
 import { ContactFallback } from '../components/ContactFallback.jsx'
@@ -17,9 +18,17 @@ import {
   sendMessage,
   submitReport,
 } from '../lib/firestore.js'
+import { occurrenceThisWeek } from '../shared/calendar.ts'
 
 const POLL_MS = 4000
+const TICK_MS = 15_000
+const GRACE_MS = 5 * 60 * 1000
 const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const THANKS_TEMPLATES = [
+  'Thank you so much, that was really helpful!',
+  "That was great, I'll leave you a review 🙌",
+  'Appreciate your time — see you around!',
+]
 const REPORT_REASONS = [
   ['spam', 'Spam or advertising'],
   ['harassment', 'Harassment or abuse'],
@@ -217,10 +226,48 @@ function Thread({ otherId, other, matches, myId, myName, onSessionChanged }) {
 
   const matchesById = useMemo(() => Object.fromEntries(matches.map((m) => [m.matchId, m])), [matches])
   const next = useMemo(() => nextSessionOf(matches), [matches])
-  const templates = useMemo(() => templatesFor(next, other.name || other.email), [next, other])
   // New messages attach to whichever match is "live" right now — the upcoming session if
   // there is one, otherwise the most recently created match between these two people.
   const defaultMatchId = useMemo(() => next?.matchId || [...matches].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.matchId, [next, matches])
+
+  // Ticks every 15s so the "session ended, N minutes left to chat" state updates live
+  // without needing a full data reload.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), TICK_MS)
+    return () => clearInterval(t)
+  }, [])
+
+  // The session that governs whether this thread is winding down — only relevant when
+  // there's nothing upcoming with this person; an upcoming session always keeps the
+  // thread fully open, regardless of what other matches have already wrapped up.
+  const endedAt = useMemo(() => {
+    if (next) return null
+    const session = matchesById[defaultMatchId]?.session
+    if (!session) return null
+    // zoomEndedAt is the real signal — Zoom's own webhook firing the moment the call actually
+    // ended (see functions/index.js#onZoomWebhook) — so it wins over any time-based guess
+    // whenever it's present, for both online and (once completed) in-person sessions.
+    if (session.zoomEndedAt) return new Date(session.zoomEndedAt)
+    if (session.status === 'completed') {
+      return new Date(session.completedAt || occurrenceThisWeek(session.day, session.endTime))
+    }
+    if (session.status === 'arranged') {
+      const end = occurrenceThisWeek(session.day, session.endTime)
+      return end.getTime() <= Date.now() ? end : null
+    }
+    return null
+  }, [next, matchesById, defaultMatchId])
+
+  const msSinceEnd = endedAt ? now - endedAt.getTime() : null
+  const isEnded = msSinceEnd != null && msSinceEnd >= 0
+  const graceRemainingMs = isEnded ? GRACE_MS - msSinceEnd : null
+  const chatClosed = isEnded && graceRemainingMs <= 0
+
+  const templates = useMemo(
+    () => (isEnded ? THANKS_TEMPLATES : templatesFor(next, other.name || other.email)),
+    [isEnded, next, other],
+  )
 
   async function load(silent) {
     if (!silent) setLoading(true)
@@ -248,7 +295,7 @@ function Thread({ otherId, other, matches, myId, myName, onSessionChanged }) {
   async function onSend(e) {
     e.preventDefault()
     const trimmed = text.trim()
-    if (!trimmed || !defaultMatchId) return
+    if (!trimmed || !defaultMatchId || chatClosed) return
     setSending(true)
     setError('')
     try {
@@ -289,7 +336,7 @@ function Thread({ otherId, other, matches, myId, myName, onSessionChanged }) {
   }
 
   async function onPropose(proposal) {
-    if (!defaultMatchId) return
+    if (!defaultMatchId || chatClosed) return
     setSending(true)
     setError('')
     try {
@@ -370,8 +417,8 @@ function Thread({ otherId, other, matches, myId, myName, onSessionChanged }) {
       )}
 
       {!loading && (
-        <div className={'msg-session-strip' + (next ? ' arranged' : '')}>
-          <Icon name="clock" size={13} />
+        <div className={'msg-session-strip' + (next ? ' arranged' : chatClosed ? ' closed' : isEnded ? ' ending' : '')}>
+          <Icon name={chatClosed ? 'lock' : 'clock'} size={13} />
           {next ? (
             <span>
               Next session <b>{next.session.day} {next.session.startTime}–{next.session.endTime}</b> · {next.moduleName} ·{' '}
@@ -379,6 +426,14 @@ function Thread({ otherId, other, matches, myId, myName, onSessionChanged }) {
               {next.session.format === 'online' && next.session.zoomLink && (
                 <> · <a href={next.session.zoomLink} target="_blank" rel="noreferrer">Join Zoom</a></>
               )}
+            </span>
+          ) : chatClosed ? (
+            <span>
+              This chat closed 5 minutes after the session ended. <Link to="/sessions">Leave feedback</Link> or start a new match to keep talking.
+            </span>
+          ) : isEnded ? (
+            <span>
+              Session ended — you can still chat for <b>{Math.ceil(graceRemainingMs / 60000)} more minute{Math.ceil(graceRemainingMs / 60000) === 1 ? '' : 's'}</b>. <Link to="/sessions">Leave feedback</Link>?
             </span>
           ) : (
             <span>No upcoming session set yet</span>
@@ -422,27 +477,36 @@ function Thread({ otherId, other, matches, myId, myName, onSessionChanged }) {
         <div ref={bottomRef} />
       </div>
 
-      {proposing ? (
-        <ProposeForm
-          initial={next?.session}
-          busy={sending}
-          onCancel={() => setProposing(false)}
-          onSubmit={onPropose}
-        />
-      ) : (
-        <div className="msg-templates">
-          <button type="button" className="msg-propose-btn" onClick={() => setProposing(true)}>
-            <Icon name="calendar" size={13} /> Propose a time
-          </button>
-          {templates.map((t) => (
-            <button type="button" key={t} onClick={() => setText(t)}>{t}</button>
-          ))}
-        </div>
+      {!chatClosed && (
+        proposing ? (
+          <ProposeForm
+            initial={next?.session}
+            busy={sending}
+            onCancel={() => setProposing(false)}
+            onSubmit={onPropose}
+          />
+        ) : (
+          <div className="msg-templates">
+            {!isEnded && (
+              <button type="button" className="msg-propose-btn" onClick={() => setProposing(true)}>
+                <Icon name="calendar" size={13} /> Propose a time
+              </button>
+            )}
+            {templates.map((t) => (
+              <button type="button" key={t} onClick={() => setText(t)}>{t}</button>
+            ))}
+          </div>
+        )
       )}
 
       <form className="msg-input-row" onSubmit={onSend}>
-        <input placeholder="Write a message…" value={text} onChange={(e) => setText(e.target.value)} disabled={sending} />
-        <button type="submit" disabled={sending || !text.trim()}>
+        <input
+          placeholder={chatClosed ? 'This chat has closed' : 'Write a message…'}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={sending || chatClosed}
+        />
+        <button type="submit" disabled={sending || chatClosed || !text.trim()}>
           {sending ? <Spinner /> : <Icon name="arrow" size={16} />}
         </button>
       </form>

@@ -22,6 +22,24 @@ export function nextOccurrence(day: Weekday, time: string): Date {
   return candidate
 }
 
+/**
+ * "Wed" + "14:00" -> the Date for that combination in the *current* week —
+ * unlike nextOccurrence, this doesn't roll forward into next week if it's
+ * already passed. Used to tell whether an arranged session's end time has
+ * actually gone by yet (e.g. to close a message thread a few minutes after
+ * a session ends), where nextOccurrence would always report it as upcoming.
+ */
+export function occurrenceThisWeek(day: Weekday, time: string): Date {
+  const targetDow = WEEKDAYS.indexOf(day)
+  const [h, m] = time.split(':').map(Number)
+  const now = new Date()
+  const delta = targetDow - now.getDay()
+  const candidate = new Date(now)
+  candidate.setDate(candidate.getDate() + delta)
+  candidate.setHours(h, m, 0, 0)
+  return candidate
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
